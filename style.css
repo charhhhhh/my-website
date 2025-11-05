@@ -1,0 +1,54 @@
+.container {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  background: #222222;
+}
+
+svg {
+  position: absolute;
+  height: 100%;
+}
+
+.lines {
+  opacity: 0.05;
+}
+
+.line {
+  fill-rule: evenodd;
+  clip-rule: evenodd;
+  fill: #4C3A90;
+}
+
+.lights {
+  opacity: 0.9;
+}
+
+.light {
+  fill-rule: evenodd;
+  clip-rule: evenodd;
+  fill: #7A6BB5;
+}
+
+.main {
+  /* 把它從正常排版中抽離，相對於 <b'ody'> 定位 */
+  position: absolute;
+
+  /* 關鍵！把它拉到比 .container (預設 z-index: auto) 更高的圖層 */
+  z-index: 10;
+
+  /* 讓它在黑色背景上顯示 */
+  color: white;
+
+  /* ----- 以下是美觀用的 (置中) ----- */
+
+  /* 把它移到螢幕 50% 的位置 */
+  top: 50%;
+  left: 50%;
+
+  /* 透過 transform 把它往回拉自己寬高的一半，達到完美置中 */
+  transform: translate(-50%, -50%);
+}
