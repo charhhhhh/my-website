@@ -52,3 +52,11 @@ svg {
   /* 透過 transform 把它往回拉自己寬高的一半，達到完美置中 */
   transform: translate(-50%, -50%);
 }
+
+.mainBroad {
+  width: 70vw;
+  height: 70vh;
+  background-color: gray;
+  opacity: 0.8;
+  border-radius: 20px
+}
