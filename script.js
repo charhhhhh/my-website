@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const instagramButton = buttons[1];
     
     instagramButton.addEventListener('click', function(event) {
-      event.preventDefault(); // 防止連結跳轉
+      // event.preventDefault(); // 防止連結跳轉
       
       // 找到按鈕內的 <i> 圖示元素
       const iconElement = this.querySelector('i.fab.fa-instagram');
