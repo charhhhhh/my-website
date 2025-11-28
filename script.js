@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const instagramButton = buttons[1];
     
     instagramButton.addEventListener('click', function(event) {
-      // event.preventDefault(); // 防止連結跳轉
+      event.preventDefault(); // 先阻止預設行為
       
       // 找到按鈕內的 <i> 圖示元素
       const iconElement = this.querySelector('i.fab.fa-instagram');
@@ -81,6 +81,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 用圖片取代圖示
         iconElement.replaceWith(img);
+      }
+      
+      // 替換完圖示後，再進行跳轉
+      const url = this.getAttribute('href');
+      if (url) {
+        window.open(url, '_blank');
       }
     });
   }
