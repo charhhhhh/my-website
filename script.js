@@ -54,3 +54,34 @@ const itemsDown = [".light4", ".light5", ".light6", ".light7", ".light8", ".ligh
 forEach(e => animateWithRandomNumber(e, -1080, 1080));
 const itemsUp = [".light1", ".light2", ".light3", ".light9", ".light10", ".light17"].
 forEach(e => animateWithRandomNumber(e, 1080, -1080));
+
+// --- Instagram 按鈕點擊事件監聽器 ---
+document.addEventListener('DOMContentLoaded', function() {
+  // 選取所有按鈕連結
+  const buttons = document.querySelectorAll('.buttons a');
+  
+  // 找到Instagram按鈕（第二個按鈕，索引為1）
+  if (buttons.length >= 2) {
+    const instagramButton = buttons[1];
+    
+    instagramButton.addEventListener('click', function(event) {
+      event.preventDefault(); // 防止連結跳轉
+      
+      // 找到按鈕內的 <i> 圖示元素
+      const iconElement = this.querySelector('i.fab.fa-instagram');
+      
+      if (iconElement) {
+        // 建立 img 元素
+        const img = document.createElement('img');
+        img.src = 'picture/bowling.png';
+        img.alt = 'Bowling';
+        img.style.width = '1em';
+        img.style.height = '1em';
+        img.style.verticalAlign = 'middle';
+        
+        // 用圖片取代圖示
+        iconElement.replaceWith(img);
+      }
+    });
+  }
+});
