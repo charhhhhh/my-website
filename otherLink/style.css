@@ -1,0 +1,274 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Noto Sans TC", "cwTeXKai", sans-serif;
+  min-height: 100vh;
+}
+
+a {
+  display: block;
+  width: 100%;
+  text-decoration: none;
+}
+
+svg {
+  position: absolute;
+  height: 100%;
+}
+
+.container {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+.lines {
+  opacity: 0.08;
+}
+
+.line {
+  fill-rule: evenodd;
+  clip-rule: evenodd;
+  fill: #4C3A90;
+}
+
+.lights {
+  opacity: 0.9;
+}
+
+.light {
+  fill-rule: evenodd;
+  clip-rule: evenodd;
+  fill: #a78bfa;
+}
+
+.mid {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.main {
+  position: absolute;
+  z-index: 10;
+  color: white;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+}
+
+.mainBroad {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 30px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: popIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.headShot {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  margin-bottom: 16px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.headShot:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 30px rgba(167, 139, 250, 0.4);
+}
+
+.username {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #81d3f8 0%, #a05dfe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bio {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  /* margin-bottom: 24px; */
+  text-align: center;
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.button {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: white;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.button:hover {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.5) 0%, rgba(139, 92, 246, 0.5) 100%);
+  border-color: rgba(167, 139, 250, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(167, 139, 250, 0.3);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button i {
+  font-size: 1.1rem;
+}
+
+/* 響應式設計 */
+@media (max-width: 480px) {
+  .main {
+    padding: 16px;
+  }
+
+  .mainBroad {
+    padding: 32px 20px;
+    border-radius: 20px;
+  }
+
+  .headShot {
+    width: 100px;
+    height: 100px;
+  }
+
+  .username {
+    font-size: 1.3rem;
+  }
+
+  .button {
+    padding: 12px 20px;
+    font-size: 0.95rem;
+  }
+}
+
+/* 年齡驗證樣式 */
+.mainBroad h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #81d3f8 0%, #a05dfe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.age-verify-text {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.age-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.age-button {
+  width: 100%;
+  padding: 16px 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: white;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.age-button.confirm {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(22, 163, 74, 0.3) 100%);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.age-button.confirm:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.5) 0%, rgba(22, 163, 74, 0.5) 100%);
+  border-color: rgba(34, 197, 94, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
+}
+
+.age-button.deny {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.3) 100%);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.age-button.deny:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.5) 0%, rgba(220, 38, 38, 0.5) 100%);
+  border-color: rgba(239, 68, 68, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+}
+
+.age-button:active {
+  transform: translateY(0);
+}
+
+.age-button i {
+  font-size: 1.1rem;
+}
