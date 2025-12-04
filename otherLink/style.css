@@ -67,7 +67,7 @@ svg {
   left: 50%;
   transform: translate(-50%, -50%);
   width: 100%;
-  max-width: 420px;
+  max-width: 700px;
   padding: 20px;
 }
 
@@ -85,7 +85,7 @@ svg {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  animation: popIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  animation: popIn 1s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 @keyframes popIn {
@@ -203,18 +203,30 @@ svg {
 .mainBroad h1 {
   font-size: 1.8rem;
   font-weight: 700;
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, #81d3f8 0%, #a05dfe 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin-bottom: 5px;
+}
+
+.age-verify-subtitle {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 24px;
+  text-align: center;
+  font-style: italic;
 }
 
 .age-verify-text {
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.age-verify-text-en {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
   margin-bottom: 32px;
   text-align: center;
+  font-style: italic;
 }
 
 .age-buttons {
