@@ -284,3 +284,27 @@ svg {
 .age-button i {
   font-size: 1.1rem;
 }
+
+/* ... 原本的 CSS ... */
+
+/* === 新增部分：全螢幕影片樣式 === */
+.scare {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  /* 確保蓋過所有原本的內容 */
+  background: black;
+}
+
+video#video {
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+}
+
+video#video::-webkit-media-controls-enclosure {
+  display: none !important;
+}

@@ -60,22 +60,54 @@ const itemsUp = [".light1", ".light2", ".light3", ".light9", ".light10", ".light
 document.addEventListener('DOMContentLoaded', function () {
   const confirmBtn = document.querySelector('.age-button.confirm');
   const denyBtn = document.querySelector('.age-button.deny');
-  const overlay = document.getElementById('overlay');
+
+  // 取得頁面元素
+  const backgroundContainer = document.querySelector('.container');
+  const mainUI = document.querySelector('.main');
+  const scareContainer = document.getElementById('scare');
+  const video = document.getElementById('video');
+
+  // 全螢幕輔助函式
+  function videoClick(event) {
+    if (event) event.preventDefault();
+    const { documentElement } = document;
+    if (documentElement.requestFullscreen) documentElement.requestFullscreen();
+    else if (documentElement.mozRequestFullScreen) documentElement.mozRequestFullScreen();
+    else if (documentElement.webkitRequestFullscreen) documentElement.webkitRequestFullscreen();
+    else if (documentElement.msRequestFullscreen) documentElement.msRequestFullscreen();
+  }
+
   if (confirmBtn) {
     confirmBtn.addEventListener('click', function (event) {
       event.preventDefault();
 
+      // 1. 隱藏原本的背景和按鈕
+      backgroundContainer.style.display = 'none';
+      mainUI.style.display = 'none';
 
+      // 2. 顯示並播放影片
+      scareContainer.style.display = 'block';
+      video.play();
 
+      // 3. 觸發全螢幕
+      videoClick();
+    });
+  }
+
+  // 影片點擊也能觸發全螢幕 (防止使用者不小心跳出)
+  if (video) {
+    video.addEventListener("click", videoClick);
+
+    // 影片結束後跳轉
+    video.addEventListener("ended", function () {
+      window.location.href = "https://dinlon5566.github.io/";
     });
   }
 
   if (denyBtn) {
     denyBtn.addEventListener('click', function () {
-      window.location.href = '../index.html'; // ㄅㄆㄇㄈ
+      window.location.href = '../index.html'; // 拒絕則回首頁
     });
   }
 });
-
-
 
