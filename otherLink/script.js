@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 影片結束後跳轉
     video.addEventListener("ended", function () {
-      window.location.href = "https://dinlon5566.github.io/";
+      window.location.href = "../index.html";
     });
   }
 
