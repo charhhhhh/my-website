@@ -55,6 +55,28 @@ forEach(e => animateWithRandomNumber(e, -1080, 1080));
 const itemsUp = [".light1", ".light2", ".light3", ".light9", ".light10", ".light17"].
 forEach(e => animateWithRandomNumber(e, 1080, -1080));
 
+// 隨機載入 pixel-text 內容
+document.addEventListener('DOMContentLoaded', function() {
+  fetch('pixel-text.txt')
+    .then(res => {
+      if (!res.ok) throw new Error('Failed to load pixel-text.txt');
+      return res.text();
+    })
+    .then(text => {
+      const lines = text
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.startsWith('#'));
+      if (lines.length === 0) return;
+      const picked = lines[Math.floor(Math.random() * lines.length)];
+      const el = document.querySelector('.pixel-text');
+      if (el) el.textContent = picked;
+    })
+    .catch(err => {
+      console.error(err);
+    });
+});
+
 // --- Instagram 按鈕點擊事件監聽器 ---
 document.addEventListener('DOMContentLoaded', function() {
   // 選取所有按鈕連結

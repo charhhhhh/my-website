@@ -1,5 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
 
+@font-face {
+  font-family: 'MyMinecraftFont';
+  /* 自定義名稱，可以隨便取 */
+  src: url('./font/zpix.ttf');
+}
+
+
 * {
   margin: 0;
   padding: 0;
@@ -20,6 +27,39 @@ a {
 svg {
   position: absolute;
   height: 100%;
+}
+
+.pixel-text {
+  font-family: 'MyMinecraftFont';
+  position: absolute;
+  color: yellow;
+  font-size: 25px;
+  top: 4%;
+  left: 85%;
+  transform: translateX(-50%) rotate(30deg);
+  transform-origin: center;
+  white-space: nowrap;
+  animation: pixelPulse 2.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes pixelPulse {
+
+  0%,
+  100% {
+    transform: translateX(-50%) rotate(30deg) scale(1);
+  }
+
+  50% {
+    transform: translateX(-50%) rotate(30deg) scale(1.05);
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-text {
+    animation: none;
+  }
 }
 
 .container {
