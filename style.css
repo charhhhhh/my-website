@@ -224,4 +224,18 @@ svg {
     padding: 12px 20px;
     font-size: 0.95rem;
   }
+
+  .pixel-text {
+    font-size: 16px;
+    top: 5%;
+    left: 78%;
+  }
+}
+
+@media (max-width: 768px) and (min-width: 481px) {
+  .pixel-text {
+    font-size: 20px;
+    top: 3.5%;
+    left: 82%;
+  }
 }
