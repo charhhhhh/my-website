@@ -33,12 +33,14 @@ svg {
   font-family: 'MyMinecraftFont';
   position: absolute;
   color: yellow;
+  /* size: 300px 300px; */
   font-size: 25px;
+
   top: 4%;
   left: 85%;
   transform: translateX(-50%) rotate(30deg);
   transform-origin: center;
-  white-space: nowrap;
+  white-space: pre;
   animation: pixelPulse 2.5s ease-in-out infinite;
   will-change: transform;
 }

@@ -1,17 +1,21 @@
-// 隨機載入 pixel-text 內容
+// 隨機載入 pixel-text JSON 內容
 document.addEventListener('DOMContentLoaded', function () {
-  fetch('pixel-text.txt')
+  fetch('pixel-text.json')
     .then(res => {
-      if (!res.ok) throw new Error('Failed to load pixel-text.txt');
-      return res.text();
+      if (!res.ok) throw new Error('Failed to load pixel-text.json');
+      return res.json();
     })
-    .then(text => {
-      const lines = text
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(l => l.length > 0 && !l.startsWith('//'));
-      if (lines.length === 0) return;
-      const picked = lines[Math.floor(Math.random() * lines.length)];
+    .then(lines => {
+      if (!Array.isArray(lines)) {
+        throw new Error('pixel-text.json must be an array');
+      }
+
+      const validLines = lines
+        .map(line => String(line).trim())
+        .filter(line => line.length > 0);
+
+      if (validLines.length === 0) return;
+      const picked = validLines[Math.floor(Math.random() * validLines.length)];
       const el = document.querySelector('.pixel-text');
       if (el) el.textContent = picked;
     })
