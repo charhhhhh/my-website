@@ -60,14 +60,14 @@
       height:2rem;
       display:block;
     }
-    .banner-site{margin:0;font-size:1.25rem;font-weight:400;font-weight: bold;
+    .banner-site{margin:0;font-size:1.5rem;font-weight:400;font-weight: bold;
     }
     #primary-message{
       color:var(--cf-text);
       margin-bottom:18px;
       min-height:1.4em;
       padding:0;
-      font-size:1.25rem;
+      font-size:1.5rem;
       font-weight:400;
     }
     #secondary-message{
@@ -91,7 +91,7 @@
       box-shadow:0 1px 3px rgba(0,0,0,.06);
       transition:border-color .2s;
     }
-    #widget.clickable{cursor:pointer}
+    #widget.clickable{cursor:pointer;width:350px}
     .widget-state{
       display:flex;
       align-items:center;
@@ -102,7 +102,6 @@
       min-width:0;
     }
     #widget-logo{
-      height:24px;
       margin-left:auto;
       flex-shrink:0;
       display:block;
@@ -359,7 +358,12 @@
       <span class="success-check">&#10003;</span>
       <span>Success!</span>
     </div>
-    <img id="widget-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='24' viewBox='0 0 72 24'%3E%3Crect x='2' y='14' width='4' height='8' fill='%23F4A62A' rx='0.5'/%3E%3Crect x='8' y='6' width='4' height='16' fill='%233D8FE0' rx='0.5'/%3E%3Crect x='14' y='16' width='4' height='6' fill='%23E8453C' rx='0.5'/%3E%3Ctext x='22' y='16' font-size='9' font-weight='700' fill='%23999' font-family='system-ui,sans-serif'%3ECAPTCHA%3C/text%3E%3C/svg%3E" width="72" height="24" alt="widget-logo">
+    <img id="widget-logo" src="https://www.gstatic.com/recaptcha/api2/logo_48.png" width="32" height="32" alt="reCAPTCHA logo" style="margin-right:8px;">
+    <span style="font-size: 12px; color: #555; line-height:1.2;">
+      <span style="font-weight:bold;">reCAPTCHA</span>
+      <br>
+      <span style="font-size: 10px;">Privacy - Terms</span>
+    </span>
   </div>
 
   <div id="puzzle-container" class="hidden">
@@ -380,13 +384,12 @@
     </div>
   </div>
 
-  <p id="secondary-message">胡言.tw nyeeds t-to weview the x3 secuwity of youw connection befowe pwoceeding.</p>
+  <p id="secondary-message">胡言.tw nyeeds to weview t-the secuwity of youw connection befowe pwoceeding.</p>
 </div>
 
 <footer id="page-footer">
   <div id="footer-inner">
     <span id="ray-id">Ray ID: <code id="ray-id-value"></code></span>
-    <a href="#" id="about-link">A-About</a>
     <a href="#" id="privacy-link">Pwivacy</a>
   </div>
 </footer>
@@ -493,7 +496,6 @@
     const grid = el('puzzle-grid');
     grid.innerHTML = '';
     puzzleErr.style.display = 'none';
-    el('btn-verify').disabled = true;
 
     const indices = shuffled(Array.from({ length: TOTAL_IMAGES }, (_, i) => i)).slice(0, 9);
 
@@ -501,14 +503,12 @@
       const cell = document.createElement('div');
       cell.className = 'grid-cell';
       const img = document.createElement('img');
-      img.src = `image/${idx}.png`;
+      img.src = `image/verify1/${idx}.png`;
       img.alt = '';
       img.draggable = false;
       cell.appendChild(img);
       cell.addEventListener('click', () => {
         cell.classList.toggle('selected');
-        const any = grid.querySelectorAll('.grid-cell.selected').length > 0;
-        el('btn-verify').disabled = !any;
       });
       grid.appendChild(cell);
     }
@@ -517,18 +517,9 @@
   el('btn-reset').addEventListener('click', buildGrid);
 
   el('btn-verify').addEventListener('click', () => {
-    const sel = document.querySelectorAll('#puzzle-grid .grid-cell.selected');
-    if (!sel.length) {
-      puzzleErr.style.display = 'block';
-      return;
-    }
     toSuccess();
   });
 
-  el('about-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    el('credits-dialog').showModal();
-  });
   el('privacy-link').addEventListener('click', (e) => {
     e.preventDefault();
     el('privacy-dialog').showModal();
