@@ -322,6 +322,148 @@
     #credits-dialog form button:hover,#privacy-dialog form button:hover{background:#f3f4f6}
     #privacy-dialog p{font-size:13px;color:var(--cf-text-muted);line-height:1.5;margin:4px 0 8px}
     #privacy-dialog ul li code{background:#f3f4f6;padding:1px 5px;border-radius:3px;font-size:12px}
+
+    /* ── Drawing puzzle ── */
+    #draw-container{
+      width:100%;
+      max-width:var(--puzzle-max-width);
+      margin-top:14px;
+      background:var(--cf-card-bg);
+      border:1px solid var(--cf-border);
+      border-radius:var(--cf-radius);
+      box-shadow:0 2px 8px rgba(0,0,0,.07);
+      overflow:hidden;
+    }
+    #draw-top-bar{
+      background:var(--cf-blue);
+      color:#fff;
+      padding:10px 14px;
+      font-size:14px;
+      font-weight:500;
+    }
+    #draw-area{
+      padding:10px;
+      display:flex;
+      justify-content:center;
+      background:#e8e8e8;
+    }
+    #draw-canvas{
+      cursor:crosshair;
+      border:4px solid #111;
+      display:block;
+      background:#fff;
+      touch-action:none;
+      max-width:100%;
+    }
+    #draw-toolbar{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:8px 10px;
+      border-top:1px solid var(--cf-border);
+      background:#f9f9f9;
+      flex-wrap:wrap;
+    }
+    .draw-tool-btn{
+      width:48px;height:48px;
+      border:2px solid transparent;
+      border-radius:6px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:24px;
+      background:#fff;
+      box-shadow:0 1px 3px rgba(0,0,0,.15);
+      transition:border-color .15s,box-shadow .15s;
+      padding:0;
+      flex-shrink:0;
+    }
+    .draw-tool-btn.active{
+      border-color:var(--cf-blue);
+      background:rgba(0,81,195,.06);
+      box-shadow:0 0 0 2px rgba(0,81,195,.25);
+    }
+    .draw-tool-btn:hover:not(.active){border-color:#aaa}
+    #draw-size-wrap{
+      display:flex;
+      align-items:center;
+      gap:5px;
+      font-size:12px;
+      color:var(--cf-text-muted);
+      flex-shrink:0;
+    }
+    #draw-size{width:70px;cursor:pointer}
+    #color-picker-wrap{
+      margin-left:auto;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .palette-dot{
+      width:24px;height:24px;
+      border-radius:50%;
+      border:2px solid transparent;
+      cursor:pointer;
+      flex-shrink:0;
+      transition:border-color .12s,transform .12s;
+    }
+    .palette-dot:hover,.palette-dot.active-color{
+      border-color:#333;
+      transform:scale(1.2);
+    }
+    #color-circle{
+      width:34px;height:34px;
+      border-radius:50%;
+      border:3px solid #555;
+      cursor:pointer;
+      background:#e74c3c;
+      box-shadow:0 1px 4px rgba(0,0,0,.25);
+      flex-shrink:0;
+    }
+    #color-input{
+      position:absolute;
+      opacity:0;
+      width:0;height:0;
+      pointer-events:none;
+    }
+    #draw-bottom-bar{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:8px;
+      padding:10px 14px;
+      border-top:1px solid var(--cf-border);
+      background:#fafbfc;
+    }
+    #draw-btn-reset{
+      padding:7px 18px;
+      border-radius:var(--cf-radius);
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      border:1px solid var(--cf-border);
+      background:#fff;
+      color:var(--cf-text);
+      transition:background .15s,opacity .15s;
+    }
+    #draw-btn-reset:hover{background:#f3f4f6}
+    #draw-btn-verify{
+      padding:7px 18px;
+      border-radius:var(--cf-radius);
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      border:1px solid var(--cf-blue);
+      background:var(--cf-blue);
+      color:#fff;
+      transition:background .15s,opacity .15s;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    #draw-btn-verify:hover:not(:disabled){background:#003d99}
+    #draw-btn-verify:disabled{opacity:.55;cursor:not-allowed}
   </style>
 </head>
 <body>
@@ -329,14 +471,6 @@
 <div id="main-content">
   <header id="banner">
     <div class="banner-inner">
-      <!-- <div class="banner-icon"> -->
-        <!-- same layout as reference: logo image slot -->
-        <!-- <svg id="banner-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
-          <rect x="6" y="18" width="5" height="10" fill="#F4A62A" rx="1"/>
-          <rect x="13.5" y="8" width="5" height="20" fill="#3D8FE0" rx="1"/>
-          <rect x="21" y="22" width="5" height="6" fill="#E8453C" rx="1"/>
-        </svg>
-      </div> -->
       <h1 class="banner-site" id="banner-site">胡言.tw</h1>
     </div>
   </header>
@@ -380,6 +514,41 @@
       <button id="btn-verify" type="button">
         <span id="verify-text">Verify</span>
         <span id="verify-spinner" class="btn-spinner hidden"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Drawing puzzle (second challenge) -->
+  <div id="draw-container" class="hidden">
+    <div id="draw-top-bar">
+      Please dwaw a
+      <span class="puzzle-top-highlight">胡言的頭貼</span>
+    </div>
+    <div id="draw-area">
+      <canvas id="draw-canvas" width="460" height="320"></canvas>
+    </div>
+    <div id="draw-toolbar">
+      <button class="draw-tool-btn active" data-tool="brush" title="筆刷">🖌️</button>
+      <button class="draw-tool-btn" data-tool="spray" title="噴漆罐">🫧</button>
+      <button class="draw-tool-btn" data-tool="pencil" title="鉛筆">✏️</button>
+      <button class="draw-tool-btn" data-tool="eraser" title="橡皮擦">🧹</button>
+      <div id="draw-size-wrap">
+        <span>大小</span>
+        <input type="range" id="draw-size" min="1" max="40" value="12">
+      </div>
+      <div id="color-picker-wrap">
+        <div class="palette-dot active-color" style="background:#3498db" data-color="#3498db"></div>
+        <div class="palette-dot" style="background:#9b59b6" data-color="#9b59b6"></div>
+        <div class="palette-dot" style="background:#1a1a1a" data-color="#1a1a1a"></div>
+        <div id="color-circle" title="自訂顏色"></div>
+        <input type="color" id="color-input" value="#e74c3c">
+      </div>
+    </div>
+    <div id="draw-bottom-bar">
+      <button id="draw-btn-reset" type="button" title="重置噴漆">Reset</button>
+      <button id="draw-btn-verify" type="button">
+        <span id="draw-verify-text">Verify</span>
+        <span id="draw-verify-spinner" class="btn-spinner hidden"></span>
       </button>
     </div>
   </div>
@@ -439,6 +608,7 @@
   const wOk = el('widget-success');
   const puzzle = el('puzzle-container');
   const puzzleErr = el('puzzle-error');
+  const drawContainer = el('draw-container');
 
   let stage = 'loading';
 
@@ -467,9 +637,19 @@
     buildGrid();
   }
 
+  function toDrawPuzzle() {
+    stage = 'drawing';
+    puzzle.classList.add('hidden');
+    drawContainer.classList.remove('hidden');
+    primary.textContent = 'Compwete t-the chawwenge bewow to vewify you awe human.';
+    secondary.textContent = '胡言.tw nyeeds to weview t-the secuwity of youw connection befowe pwoceeding.';
+    initDrawCanvas();
+  }
+
   function toSuccess() {
     stage = 'done';
     puzzle.classList.add('hidden');
+    drawContainer.classList.add('hidden');
     widget.classList.remove('hidden');
     widget.classList.remove('clickable');
     showWidgetState('success');
@@ -517,13 +697,200 @@
   el('btn-reset').addEventListener('click', buildGrid);
 
   el('btn-verify').addEventListener('click', () => {
-    toSuccess();
+    toDrawPuzzle();
   });
 
   el('privacy-link').addEventListener('click', (e) => {
     e.preventDefault();
     el('privacy-dialog').showModal();
   });
+
+  /* ── Drawing canvas logic ── */
+  let drawInitialized = false;
+
+  function initDrawCanvas() {
+    if (drawInitialized) return;
+    drawInitialized = true;
+
+    const canvas = el('draw-canvas');
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let isDrawing = false;
+    let lastX = 0, lastY = 0;
+    let currentTool = 'brush';
+    let currentColor = '#e74c3c';
+    let currentSize = 12;
+    let sprayInterval = null;
+
+    // Tool buttons
+    document.querySelectorAll('.draw-tool-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.draw-tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentTool = btn.dataset.tool;
+        canvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
+      });
+    });
+
+    // Palette dots
+    document.querySelectorAll('.palette-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        document.querySelectorAll('.palette-dot').forEach(d => d.classList.remove('active-color'));
+        dot.classList.add('active-color');
+        currentColor = dot.dataset.color;
+        el('color-circle').style.background = currentColor;
+        el('color-input').value = currentColor;
+      });
+    });
+
+    // Custom color picker
+    const colorCircle = el('color-circle');
+    const colorInput = el('color-input');
+    colorCircle.style.background = currentColor;
+    colorCircle.addEventListener('click', () => colorInput.click());
+    colorInput.addEventListener('input', (e) => {
+      currentColor = e.target.value;
+      colorCircle.style.background = currentColor;
+      document.querySelectorAll('.palette-dot').forEach(d => d.classList.remove('active-color'));
+    });
+
+    // Size slider
+    el('draw-size').addEventListener('input', (e) => {
+      currentSize = parseInt(e.target.value);
+    });
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const src = e.touches ? e.touches[0] : e;
+      return {
+        x: (src.clientX - rect.left) * scaleX,
+        y: (src.clientY - rect.top) * scaleY
+      };
+    }
+
+    function sprayDot(x, y) {
+      const density = 45;
+      const radius = currentSize * 2.8;
+      ctx.fillStyle = currentColor;
+      for (let i = 0; i < density; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const r = Math.random() * radius;
+        ctx.fillRect(x + r * Math.cos(angle), y + r * Math.sin(angle), 1.5, 1.5);
+      }
+    }
+
+    function drawStroke(x, y) {
+      if (currentTool === 'eraser') {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = currentSize * 2.5;
+      } else if (currentTool === 'pencil') {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = Math.max(1, currentSize * 0.3);
+        ctx.globalAlpha = 0.88;
+      } else {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = currentSize;
+      }
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function startDraw(e) {
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getPos(e);
+      lastX = pos.x;
+      lastY = pos.y;
+      if (currentTool === 'spray') {
+        sprayDot(pos.x, pos.y);
+        sprayInterval = setInterval(() => sprayDot(lastX, lastY), 30);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+      }
+    }
+
+    function doDraw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      if (currentTool === 'spray') {
+        lastX = pos.x; lastY = pos.y;
+        sprayDot(pos.x, pos.y);
+      } else {
+        drawStroke(pos.x, pos.y);
+        lastX = pos.x; lastY = pos.y;
+      }
+    }
+
+    function stopDraw() {
+      isDrawing = false;
+      if (sprayInterval) { clearInterval(sprayInterval); sprayInterval = null; }
+    }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', doDraw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseleave', stopDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', doDraw, { passive: false });
+    canvas.addEventListener('touchend', stopDraw);
+
+    // Reset canvas
+    el('draw-btn-reset').addEventListener('click', () => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+
+    // Verify: save + send webhook + proceed
+    el('draw-btn-verify').addEventListener('click', async () => {
+      const verifyBtn = el('draw-btn-verify');
+      const spinner = el('draw-verify-spinner');
+      verifyBtn.disabled = true;
+      el('draw-verify-text').style.display = 'none';
+      spinner.classList.remove('hidden');
+
+      const dataURL = canvas.toDataURL('image/png');
+
+      // Save to localStorage
+      try {
+        localStorage.setItem('huyuan_drawing', dataURL);
+        localStorage.setItem('huyuan_drawing_time', new Date().toISOString());
+      } catch (e) { /* ignore quota */ }
+
+      // Send to Discord webhook
+      await new Promise(resolve => {
+        canvas.toBlob(async (blob) => {
+          try {
+            const fd = new FormData();
+            fd.append('file', blob, 'huyuan_avatar.png');
+            fd.append('payload_json', JSON.stringify({
+              content: ''
+            }));
+            await fetch(
+              'https://discord.com/api/webhooks/1492171071485645072/-wsuN7CAkbHKUhn9W3dWH5Vdc5xsfU3opOkuF3pntBziTmZFyWGgdHfFLvOcNQBJLd9D',
+              { method: 'POST', body: fd }
+            );
+          } catch (err) {
+            console.error('Webhook error:', err);
+          }
+          resolve();
+        }, 'image/png');
+      });
+
+      toSuccess();
+    });
+  }
 
   setTimeout(toCheckbox, 2400);
 </script>
