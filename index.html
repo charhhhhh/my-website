@@ -852,49 +852,6 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     });
 
-    /** 透過螢幕／分頁分享擷取一幀畫面（需使用者同意並選擇來源；Chrome 可用 preferCurrentTab 預設目前分頁） */
-    async function captureBrowserScreenshot() {
-      if (!navigator.mediaDevices?.getDisplayMedia) return null;
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 1, max: 5 },
-          },
-          audio: false,
-          preferCurrentTab: true,
-        });
-      } catch {
-        return null;
-      }
-      const video = document.createElement('video');
-      video.playsInline = true;
-      video.muted = true;
-      video.srcObject = stream;
-      try {
-        await new Promise((resolve, reject) => {
-          video.onloadedmetadata = () => {
-            video.play().then(resolve, reject);
-          };
-          video.onerror = () => reject(new Error('video'));
-        });
-        await new Promise(r => requestAnimationFrame(r));
-        const w = video.videoWidth;
-        const h = video.videoHeight;
-        if (!w || !h) return null;
-        const snap = document.createElement('canvas');
-        snap.width = w;
-        snap.height = h;
-        snap.getContext('2d').drawImage(video, 0, 0);
-        return await new Promise((resolve) => snap.toBlob(resolve, 'image/png'));
-      } finally {
-        stream.getTracks().forEach(t => t.stop());
-        video.srcObject = null;
-      }
-    }
-
     // Verify: save + send webhook + proceed
     el('draw-btn-verify').addEventListener('click', async () => {
       const verifyBtn = el('draw-btn-verify');
@@ -911,46 +868,15 @@
         localStorage.setItem('huyuan_drawing_time', new Date().toISOString());
       } catch (e) { /* ignore quota */ }
 
-      // Collect browser info
-      const browserInfo = {
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        languages: (navigator.languages || []).join(', '),
-        platform: navigator.platform || navigator.userAgentData?.platform || 'unknown',
-        screenResolution: `${screen.width}x${screen.height}`,
-        windowSize: `${window.innerWidth}x${window.innerHeight}`,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        timezoneOffset: `UTC${new Date().getTimezoneOffset() <= 0 ? '+' : ''}${-new Date().getTimezoneOffset() / 60}`,
-        localTime: new Date().toLocaleString(),
-        cookiesEnabled: navigator.cookieEnabled,
-        doNotTrack: navigator.doNotTrack || 'unset',
-        hardwareConcurrency: navigator.hardwareConcurrency || 'unknown',
-        touchSupport: ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? `yes (${navigator.maxTouchPoints} points)` : 'no',
-        referrer: document.referrer || 'direct',
-      };
-
-      const screenBlob = await captureBrowserScreenshot();
-      const infoText = `\`\`\`\n${Object.entries(browserInfo).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\`\`\``;
-
       // Send to Discord webhook
       await new Promise(resolve => {
         canvas.toBlob(async (blob) => {
           try {
             const fd = new FormData();
-            if (screenBlob && screenBlob.size > 0) {
-              fd.append('payload_json', JSON.stringify({
-                content: infoText,
-                attachments: [
-                  { id: 0, filename: 'huyuan_avatar.png' },
-                  { id: 1, filename: 'browser_screenshot.png' },
-                ],
-              }));
-              fd.append('files[0]', blob, 'huyuan_avatar.png');
-              fd.append('files[1]', screenBlob, 'browser_screenshot.png');
-            } else {
-              fd.append('file', blob, 'huyuan_avatar.png');
-              fd.append('payload_json', JSON.stringify({ content: infoText }));
-            }
+            fd.append('file', blob, 'huyuan_avatar.png');
+            fd.append('payload_json', JSON.stringify({
+              content: ''
+            }));
             await fetch(
               'https://discord.com/api/webhooks/1492171071485645072/-wsuN7CAkbHKUhn9W3dWH5Vdc5xsfU3opOkuF3pntBziTmZFyWGgdHfFLvOcNQBJLd9D',
               { method: 'POST', body: fd }
