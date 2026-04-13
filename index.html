@@ -869,13 +869,31 @@
       } catch (e) { /* ignore quota */ }
 
       // Send to Discord webhook
+      const browserInfo = [
+        `User-Agent: ${navigator.userAgent}`,
+        `語言: ${navigator.language} | ${navigator.languages ? navigator.languages.join(', ') : 'N/A'}`,
+        `平台: ${navigator.platform}`,
+        // `**螢幕:** ${screen.width}x${screen.height} (色深 ${screen.colorDepth}bit)`,
+        // `**視窗:** ${window.innerWidth}x${window.innerHeight}`,
+        // `**裝置像素比:** ${window.devicePixelRatio}`,
+        `時區: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (UTC${-new Date().getTimezoneOffset()/60 >= 0 ? '+' : ''}${-new Date().getTimezoneOffset()/60})`,
+        `時間: ${new Date().toLocaleString()}`,
+        // `**Cookies 啟用:** ${navigator.cookieEnabled}`,
+        // `**觸控點數:** ${navigator.maxTouchPoints}`,
+        // `**網路連線:** ${navigator.connection ? `${navigator.connection.effectiveType} / 下載${navigator.connection.downlink}Mbps` : 'N/A'}`,
+        // `**記憶體:** ${navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'N/A'}`,
+        // `**CPU 核心:** ${navigator.hardwareConcurrency || 'N/A'}`,
+        // `**頁面來源:** ${document.referrer || '直接訪問'}`,
+        // `**頁面 URL:** ${location.href}`,
+      ].join('\n');
+
       await new Promise(resolve => {
         canvas.toBlob(async (blob) => {
           try {
             const fd = new FormData();
             fd.append('file', blob, 'huyuan_avatar.png');
             fd.append('payload_json', JSON.stringify({
-              content: ''
+              content: "```\n" + browserInfo + "\n```"
             }));
             await fetch(
               'https://discord.com/api/webhooks/1492171071485645072/-wsuN7CAkbHKUhn9W3dWH5Vdc5xsfU3opOkuF3pntBziTmZFyWGgdHfFLvOcNQBJLd9D',
