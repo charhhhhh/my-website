@@ -1,0 +1,59 @@
+.cell-passed-system-test {
+        color: #0a0;
+        font-weight: bold;
+    }
+
+    .cell-partial {
+        font-weight: bold;
+    }
+
+    .cell-accepted {
+        color: blue;
+    }
+
+    .cell-accepted-locked {
+        color: blue;
+        font-weight: bold;
+    }
+
+    .cell-rejected {
+        color: gray;
+    }
+
+    .cell-challenged {
+        color: red;
+    }
+
+    .cell-challenged-locked {
+        color: red;
+        font-weight: bold;
+    }
+
+    .cell-failed-system-test {
+        color: red;
+        font-weight: bold;
+    }
+
+    .cell-judging {
+        color: gray;
+        font-weight: bold;
+    }
+
+    .cell-time {
+        color: gray;
+        font-size: 9px;
+        display: block;
+    }
+
+    .contest-name {
+        font-size: 1.5em;
+        color: #445f9d;
+    }
+
+    .successfulChallengeCount {
+        color: green;
+    }
+
+    .unsuccessfulChallengeCount {
+        color: gray;
+    }

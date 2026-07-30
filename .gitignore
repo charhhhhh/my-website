@@ -1,3 +1,7 @@
 test.html
 .vscode
 .cursor
+.playwright-mcp/
+codeforces-clone/node_modules/
+codeforces-clone/.next/
+codeforces-clone/docs/research/raw/

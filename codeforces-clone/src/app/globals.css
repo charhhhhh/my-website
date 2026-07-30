@@ -1,0 +1,19 @@
+/* Tailwind WITHOUT preflight.
+   The clone is styled by Codeforces' own stylesheets, served verbatim from public/ and
+   linked in layout.tsx. Tailwind's preflight resets table borders, list styles, heading
+   sizes and margins - all of which Codeforces' CSS depends on - so importing it would
+   quietly break the very layout we are reproducing. Theme + utilities only keeps
+   Tailwind classes available for anything we add ourselves.
+   Dark mode is deliberately absent: codeforces.com has no dark theme. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Codeforces styles its own <body>; Next owns <html>/<body>, so hand the page over to
+   #body, which is where their fixed 1200px centered layout actually lives. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #fff;
+}

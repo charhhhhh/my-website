@@ -1,0 +1,65 @@
+.question-answer-by {
+        margin-top: 0.5rem;
+        font-size: 1rem;
+        color: #666;
+    }
+
+    .question-requestText-td {
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+
+        -ms-word-break: break-all;
+        /* This is the dangerous one in WebKit, as it breaks things wherever */
+        word-break: break-all;
+        /* Instead use this non-standard one: */
+        word-break: break-word;
+
+        /* Adds a hyphen where the word breaks, if supported (No Blink) */
+        -ms-hyphens: auto;
+        -moz-hyphens: auto;
+        -webkit-hyphens: auto;
+        hyphens: auto;
+
+        text-align: left !important;
+        /*white-space: ;*/
+        width: 20rem;
+    }
+
+    .quick-answer-select {
+        display: none;
+        position: absolute;
+        margin-top: 4px;
+        padding: 0;
+        list-style: none;
+        border: 1px solid #aaa;
+        background: white;
+        width: 300px;
+    }
+
+    .quick-answer-select li {
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+
+    .quick-answer-select li:hover {
+        background: #eee;
+    }
+
+    .hide-question {
+        cursor: pointer;
+    }
+
+    @media (min-width: 1024px) {
+        .answer-question-box table {
+            width: 60em;
+        }
+    }
+    @media (max-width: 1023px) {
+        .answer-question-box table {
+            width: 30em;
+        }
+    }
+
+    .custom-quick-answer {
+        background: var(--highlighted-green-color) !important;
+    }

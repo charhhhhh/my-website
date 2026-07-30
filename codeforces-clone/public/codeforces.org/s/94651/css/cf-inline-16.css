@@ -1,0 +1,33 @@
+._ChallengesFilterFrame_frame {
+  
+  
+  margin: 0.8em;
+}
+._ChallengesFilterFrame_frame ._ChallengesFilterFrame_buttons {
+  text-align: center;
+  margin: 1em 0 0.1em 0;
+}
+._ChallengesFilterFrame_frame div.setting-name {
+  color: #3B5998;
+  font-weight: bold;
+  font-size: 0.8em;
+}
+._ChallengesFilterFrame_frame .setting-value {
+  width: 100%;
+  font-size: 0.8em;
+}
+._ChallengesFilterFrame_frame div.shiftUp {
+  font-size: 0.8em;
+}
+._ChallengesFilterFrame_frame input {
+  font-size: 0.8em;
+}
+._ChallengesFilterFrame_frame input.setting-value {
+  box-sizing: border-box;
+}
+._ChallengesFilterFrame_frame ._frame-form-part {
+  margin: 0.5em 0;
+}
+._ChallengesFilterFrame_frame ._frame-form-part:first-child {
+  margin: 0 0 0.5em 0;
+}
