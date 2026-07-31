@@ -3,6 +3,10 @@ import { ContestLayout } from "@/components/ContestLayout";
 import { NotCapturedNotice } from "@/components/NotCapturedNotice";
 import { contestData, CONTEST_ID } from "@/lib/contest";
 
+export function generateStaticParams() {
+  return [{ id: CONTEST_ID }];
+}
+
 export const metadata: Metadata = {
   title: `Custom Invocation - ${contestData.contest.title} - Codeforces`,
 };

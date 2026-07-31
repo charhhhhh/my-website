@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { ContestLayout } from "@/components/ContestLayout";
-import { contestData } from "@/lib/contest";
+import { contestData, CONTEST_ID, ROOM_ID } from "@/lib/contest";
+
+export function generateStaticParams() {
+  return [{ id: CONTEST_ID, room: ROOM_ID }];
+}
 
 export const metadata: Metadata = {
   title: `Room #1 - ${contestData.contest.title} - Codeforces`,

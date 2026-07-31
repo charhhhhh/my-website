@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { ContestLayout } from "@/components/ContestLayout";
 import { CapturedTable } from "@/components/CapturedTable";
-import { contestData } from "@/lib/contest";
+import { contestData, CONTEST_ID } from "@/lib/contest";
+
+export function generateStaticParams() {
+  return [{ id: CONTEST_ID }];
+}
 
 export const metadata: Metadata = {
   title: `Hacks - ${contestData.contest.title} - Codeforces`,
