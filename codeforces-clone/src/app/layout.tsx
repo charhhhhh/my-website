@@ -20,6 +20,13 @@ export default function RootLayout({
         {CF_STYLESHEETS.map((href) => (
           <link key={href} rel="stylesheet" href={href} />
         ))}
+        {/* Ours, not Codeforces'. Must stay LAST: it overrides their fixed-width desktop
+            layout below 920px with plain selectors, which only works while it wins on
+            source order. globals.css cannot do this job - Next injects it above every
+            link here. */}
+        {/* eslint-disable-next-line @next/next/no-css-tags -- importing it would let Next
+            hoist it above the Codeforces sheets, which is exactly what must not happen */}
+        <link rel="stylesheet" href="/mobile-fit.css" />
       </head>
       <body>{children}</body>
     </html>

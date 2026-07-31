@@ -1,0 +1,11 @@
+在終端機切到專案資料夾
+cd c:\code\my-website\codeforces-clone
+
+第一次執行先安裝套件
+npm install
+
+啟動網站
+npm run dev
+
+瀏覽器打開
+http://localhost:3000

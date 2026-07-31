@@ -1,0 +1,242 @@
+/* ============================================================================
+   Mobile fit.
+
+   The ONLY stylesheet in this project that is not Codeforces' own. It is deliberately
+   NOT under public/codeforces.org/ - that tree is a byte-for-byte mirror of their
+   assets and nothing of ours belongs in it.
+
+   codeforces.com is a fixed-width desktop site with no responsive layer at all: their
+   style.css pins `#body { min-width: 920px }`, so a 390px viewport gets ~540px of
+   horizontal scroll and every descendant inherits the overflow. This file adds the
+   responsive layer they never wrote.
+
+   Load order is load-bearing. globals.css is injected by Next at the TOP of <head>,
+   before all 62 Codeforces sheets, so overrides placed there lose on equal specificity.
+   This file is linked LAST in layout.tsx - after every Codeforces sheet - which is why
+   it can override them with plain selectors instead of an !important on every line.
+
+   Everything is inside `@media (max-width: 920px)`, the exact width where their
+   min-width starts fighting the viewport. At 921px and up not one declaration applies,
+   so the desktop clone stays pixel-identical.
+   ============================================================================ */
+
+@media (max-width: 920px) {
+  /* --- 1. The root blocker -------------------------------------------------
+     min-width:920px on #body is the single cause of the horizontal scroll; the other
+     ~200 overflowing elements are just children sized against it. Releasing it lets
+     the whole tree reflow to the viewport. */
+  #body {
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+  }
+
+  /* Belt and braces: a stray wide child (an unwrapped <pre>, a pasted table) should
+     scroll its own box, never widen the page. */
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* --- 2. Header ----------------------------------------------------------
+     .lang-chooser is float:right, which at narrow widths lands on top of the logo.
+     Drop it below instead. */
+  #header {
+    margin: 0 0.5em;
+    min-height: 0;
+  }
+
+  /* The logo sits in a float:left box, so simply un-floating .lang-chooser is not enough -
+     it keeps flowing alongside the float and Enter/Register lands on top of the wordmark.
+     clear:both is what actually drops it onto its own line. */
+  #header .lang-chooser {
+    float: none;
+    clear: both;
+    text-align: left;
+    margin-top: 0.5em;
+  }
+
+  /* The logo is a 65px-tall bitmap in a box capped at max-height:60px; below ~360px its
+     natural width is wider than the screen. height:auto (inline `height:65px` needs the
+     !important) keeps the aspect ratio while max-width reins the width in. */
+  #header img {
+    max-width: 100%;
+    height: auto !important;
+  }
+
+  /* ...but shrinking the image to fit the width makes it TALLER than its wrapper's
+     inline max-height:60px (measured 84px at 390px wide). The wrapper keeps reporting 60px,
+     so clear:both above drops .lang-chooser to y=74 - straight through the bottom 24px of
+     the logo. Releasing the cap makes the wrapper actually contain the image, which is what
+     gives clear:both something correct to clear. */
+  #header > div[style*="float"] {
+    float: none !important;
+    max-height: none !important;
+  }
+
+  /* --- 3. Main nav --------------------------------------------------------
+     .menu-list li is float:left, so the 8 items form one 873px row that cannot wrap.
+     Flex lets the row break; the gap replaces the per-item margin-right so there is
+     no dangling margin at the end of each line. */
+  /* .menu-box is `height: 2.5em; line-height: 2.5em` - sized for exactly one row of tabs.
+     Once the list below wraps to two or three rows the box does not grow with it, and the
+     extra rows spill out and print over the contest title underneath. Releasing the fixed
+     height is what makes wrapping safe; without it the flex rule below is a bug, not a fix. */
+  .roundbox.menu-box {
+    height: auto;
+    line-height: 1.9;
+    padding-bottom: 0.5em;
+    margin: 0 0.5em;
+  }
+
+  ul.menu-list.main-menu-list {
+    margin-left: 0.5em;
+    padding-left: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em 1.2em;
+  }
+
+  ul.menu-list.main-menu-list li {
+    float: none;
+    margin-right: 0;
+    top: 0;
+  }
+
+  /* The <a> is float:left inside the li; with a non-floated li that would collapse it
+     to zero height. */
+  ul.menu-list.main-menu-list li a {
+    float: none;
+  }
+
+  /* --- 4. Sidebar ---------------------------------------------------------
+     #sidebar is float:right;width:20em with margin-left:-22em, and #pageContent
+     reserves the gap with margin-right:22em !important. On a phone there is no room
+     for a 280px column beside the content, so the sidebar stops floating and stacks
+     underneath. The !important is required only to beat .content-with-sidebar's own. */
+  #sidebar {
+    float: none;
+    width: auto;
+    display: block;
+    margin: 1em 0.5em;
+  }
+
+  #pageContent {
+    margin: 0.5em;
+  }
+
+  #pageContent.content-with-sidebar {
+    margin-right: 0.5em !important;
+  }
+
+  /* --- 5. Contest tab bar -------------------------------------------------
+     .second-level-menu is position:absolute;top:-12px, lifted over the content by the
+     relative wrapper in ContestLayout. Absolute + a 542px unwrappable row of floats is
+     unusable narrow, so it rejoins the flow and the tabs wrap onto several lines.
+     height:29px/overflow:hidden on the list would clip every line but the first.
+
+     The active-tab highlight (.backLava) is positioned from the active li's
+     offsetLeft/offsetTop by SecondLevelMenu, and re-measures on window resize - so it
+     follows the tabs onto whichever line they wrap to, no extra work needed. */
+  .second-level-menu {
+    position: static;
+    left: auto;
+    top: auto;
+    margin: 0 0 0.75em;
+  }
+
+  .second-level-menu-list {
+    display: block;
+    height: auto;
+    overflow: visible;
+    padding-left: 0;
+  }
+
+  .second-level-menu-list li {
+    float: none;
+    display: inline-block;
+  }
+
+  .second-level-menu-list li a {
+    float: none;
+  }
+
+  /* .backLava is inline-styled by the component, so its float:none has to come from
+     here to avoid being pulled out of place. */
+  .second-level-menu-list li.backLava {
+    float: none;
+  }
+
+  /* --- 6. Wide tables ----------------------------------------------------
+     Standings and status tables have more columns than a phone can show. Their columns
+     shrink to min-content first and only then overflow - so scroll the white inner
+     panel of the .datatable frame rather than squeezing text to one letter per line.
+     :last-child is that panel (the .lt/.rt/.lb/.rb corner sprites precede it). */
+  .datatable > div:last-child {
+    overflow-x: auto;
+  }
+
+  /* The questions feed is three columns of monospace prose. Left to shrink into a ~110px
+     column it stays technically inside the viewport but breaks mid-word ("Announcemen t"),
+     which is worse than scrolling. A floor on the table width hands it to the scroll
+     container above instead. The problems table is left alone - it reads fine at 320px. */
+  table.problem-questions-table {
+    min-width: 34em;
+  }
+
+  /* --- 6b. Problems table: the name/limits collision ----------------------
+     Each Name cell layers two children inside a position:relative wrapper - the problem
+     title floated left, and a .notice block pinned position:absolute;right:0;top:-0.5em
+     carrying "standard input/output" and the time/memory limits. Desktop has ~500px of
+     cell, so they sit side by side. At phone widths the absolute block has nowhere to go
+     and prints straight over the title, which is what makes the table look scrambled.
+
+     Un-pinning .notice puts the limits on their own line under the title. Both children
+     are inline-styled, hence !important. */
+  table.problems td .notice {
+    position: static !important;
+    text-align: left !important;
+    padding-top: 0.25em !important;
+  }
+
+  table.problems td > div > div:first-child {
+    float: none !important;
+  }
+
+  /* --- 7. Long unbreakable content ---------------------------------------
+     Problem statements carry long formulas, URLs and code samples. */
+  #pageContent pre,
+  #pageContent .input pre,
+  #pageContent .output pre {
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  #pageContent img,
+  #sidebar img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  #pageContent .ttypography {
+    overflow-wrap: break-word;
+  }
+
+  /* The Room tab injects Codeforces' captured markup verbatim, which carries inline
+     widths their desktop layout could afford - e.g. `width:35em` (385px) on the
+     "double click into cells" hint, the last thing still overflowing at 320/390px.
+     Inline styles can only be beaten with !important.
+
+     Scoped to <div> on purpose: MathJax lays problem statements out with hundreds of
+     inline-width <span>s (`width: 0.598em`, `width: 5.241em`), and those widths are
+     load-bearing - capping them would visibly break every formula. */
+  #pageContent div[style*="width:"] {
+    max-width: 100% !important;
+  }
+
+  /* --- 8. Footer ---------------------------------------------------------- */
+  #footer {
+    margin: 1em 0.5em 0;
+  }
+}
