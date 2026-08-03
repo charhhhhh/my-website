@@ -124,10 +124,17 @@ export default function Taskbar({ tasks, menu }: { tasks: TaskItem[]; menu: Task
 
         <div className="taskbar__tasks">
           {tasks.map((t) => (
-            <button key={t.id} className="taskbar__task" onClick={() => go(t.id)}>
+            <button
+              key={t.id}
+              className="taskbar__task"
+              onClick={() => go(t.id)}
+              title={t.label}
+              aria-label={t.label}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`/oc/icon/${t.icon}.png`} alt="" />
-              {t.label}
+              {/* 手機上只留圖示，文字用 CSS 收起來 */}
+              <span className="taskbar__label">{t.label}</span>
             </button>
           ))}
         </div>

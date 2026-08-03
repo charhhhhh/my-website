@@ -41,6 +41,12 @@ body {
   padding: 0;
 }
 
+html {
+  /* iOS 橫向時不要自己放大內文 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--ui);
   font-size: 13px;
@@ -53,7 +59,8 @@ body {
     radial-gradient(900px 700px at 50% 108%, rgba(111, 240, 255, 0.42), transparent 68%),
     linear-gradient(178deg, #6fb3ff 0%, #8fa8ff 34%, #b9a6f5 68%, #d9c7f2 100%);
   background-attachment: fixed;
-  padding-bottom: 56px; /* 讓工作列不要蓋到內容 */
+  /* 讓工作列不要蓋到內容，並讓開 iPhone 底部的 home indicator */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom));
   overflow-x: hidden;
 }
 
@@ -482,6 +489,39 @@ p:last-child {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 
+/* 手機：圖示改成一排橫向滑動，不然十個圖示會吃掉半個首屏 */
+@media (max-width: 620px) {
+  .icons {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* 出血到螢幕邊緣，讓人看得出來還能往右滑。
+       負邊界要跟 .desktop 的水平 padding 對齊，否則會多出幾 px 橫向捲動 */
+    margin: 14px -8px 4px;
+    padding: 0 8px 6px;
+    gap: 2px;
+  }
+
+  .icons::-webkit-scrollbar {
+    display: none;
+  }
+
+  .icons__item {
+    flex: none;
+    width: 72px;
+    scroll-snap-align: start;
+    font-size: 10.5px;
+  }
+
+  .icons__item img {
+    width: 38px;
+    height: 38px;
+  }
+}
+
 /* ============================================================
    清單 / 表格 / 進度條
    ============================================================ */
@@ -527,10 +567,28 @@ p:last-child {
   font-size: 11px;
 }
 
+/* 手機：標題跟百分比排一行，長條自己佔滿下一行，
+   不然「演算法 / 資料結構」會被擠成三行 */
 @media (max-width: 620px) {
   .meter {
-    grid-template-columns: 78px minmax(0, 1fr) 38px;
-    gap: 7px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "label num"
+      "track track";
+    gap: 3px 10px;
+  }
+
+  .meter > :first-child {
+    grid-area: label;
+  }
+
+  .meter__track {
+    grid-area: track;
+    height: 20px;
+  }
+
+  .meter__num {
+    grid-area: num;
   }
 }
 
@@ -874,11 +932,11 @@ p:last-child {
   right: 0;
   bottom: 0;
   z-index: 50;
-  height: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 6px 0 0;
+  padding: 0 6px env(safe-area-inset-bottom) 0;
   background:
     linear-gradient(
       180deg,
@@ -971,9 +1029,22 @@ p:last-child {
   flex: none;
 }
 
+/* 手機：工作列只留圖示，不然放不下也不好按 */
 @media (max-width: 720px) {
-  .taskbar__tasks {
+  .taskbar__label {
     display: none;
+  }
+  .taskbar__tasks {
+    gap: 3px;
+    padding-left: 3px;
+    justify-content: flex-end;
+  }
+  .taskbar__task {
+    padding: 6px 9px;
+  }
+  .taskbar__task img {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -1002,9 +1073,11 @@ p:last-child {
 .startmenu {
   position: fixed;
   left: 4px;
-  bottom: 42px;
+  bottom: calc(42px + env(safe-area-inset-bottom));
   z-index: 60;
-  width: 268px;
+  width: min(268px, calc(100vw - 16px));
+  max-height: calc(100vh - 60px - env(safe-area-inset-bottom));
+  overflow-y: auto;
   background: var(--face);
   border: 2px solid;
   border-color: var(--hi) var(--sh-dk) var(--sh-dk) var(--hi);
@@ -1147,6 +1220,91 @@ p:last-child {
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 4px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* ============================================================
+   手機微調
+   ============================================================ */
+
+@media (max-width: 620px) {
+  body {
+    /* 13px 在手機上太小，桌機維持原樣 */
+    font-size: 14px;
+    line-height: 1.8;
+  }
+
+  .desktop {
+    padding: 12px 8px 28px;
+  }
+
+  /* 邊框省下來的每一像素都拿去放內文 */
+  .win__body {
+    padding: 12px 10px;
+  }
+
+  .paper {
+    padding: 11px 11px;
+  }
+
+  .win__title {
+    font-size: 12.5px;
+  }
+
+  .chrome-text {
+    font-size: clamp(44px, 12vw, 72px);
+  }
+
+  .tiny {
+    font-size: 12px;
+  }
+
+  .win__status {
+    font-size: 11.5px;
+  }
+
+  /* 時間軸年份欄縮窄 */
+  .tl__row {
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .footer {
+    padding: 14px 12px;
+    font-size: 12px;
+  }
+}
+
+/* 觸控裝置與窄視窗：按鈕要按得到 */
+@media (pointer: coarse), (max-width: 620px) {
+  .btn {
+    min-height: 42px;
+    padding: 8px 16px;
+  }
+
+  .btn:active {
+    padding: 9px 15px 7px 17px;
+  }
+
+  .icons__item {
+    min-height: 76px;
+  }
+
+  .list__item {
+    padding: 10px 9px;
+  }
+
+  .player__track {
+    padding: 8px 7px;
+  }
+
+  .startmenu__item {
+    padding: 11px 12px;
+  }
+
+  .win__btn {
+    width: 24px;
+    height: 21px;
+  }
 }
 
 .rule {
