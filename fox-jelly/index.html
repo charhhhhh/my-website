@@ -57,7 +57,7 @@
   .kicker, .label { font: 500 12px/1 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
 
   .masthead { position: fixed; top: var(--gutter); left: var(--gutter); pointer-events: none; }
-  .masthead h1 { font: 400 clamp(58px, 7.4vw, 118px)/1.04 var(--serif); letter-spacing: 0; margin: 18px 0 20px; }
+  .masthead h1 { font: 400 clamp(58px, 7.4vw, 118px)/1.04 var(--serif); letter-spacing: 0; margin: 0 0 20px; }
   .masthead h1 span { display: block; }
   .masthead h1 span + span { padding-left: .42em; }
   .caption { font: 400 15px/1.5 var(--serif); color: var(--muted); margin: 0; }
@@ -65,9 +65,8 @@
   /* ── specimen panel ── */
   .panel { position: fixed; right: var(--gutter); top: var(--gutter); width: 256px;
     border: 1px solid var(--line); background: rgba(226, 223, 218, .78); padding: 20px 20px 18px; }
-  .panel header { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-  .panel header span:last-child { font: 13px/1 var(--serif); color: var(--muted); letter-spacing: 0; text-transform: none; }
   .group { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .group:first-child { padding-top: 0; }
   .group:last-of-type { border-bottom: 0; }
   .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
   .swatch { background: none; border: 1px solid transparent; padding: 6px 6px 7px; cursor: pointer; text-align: left; }
@@ -118,8 +117,7 @@
     .masthead, .panel, .readouts, .stage { position: static; }
     body { display: grid; grid-template-columns: 1fr; grid-template-areas: "head" "stage" "read" "panel"; padding: 0 0 var(--gutter); }
     .masthead { grid-area: head; padding: var(--gutter) var(--gutter) 12px; }
-    .masthead .kicker { white-space: nowrap; font-size: 11.5px; letter-spacing: .14em; }
-    .masthead h1 { font-size: clamp(46px, 14vw, 76px); margin: 12px 0 12px; }
+    .masthead h1 { font-size: clamp(46px, 14vw, 76px); margin: 0 0 12px; }
     .caption { font-size: 14px; }
     .stage { grid-area: stage; height: clamp(300px, 56vh, 600px); position: relative; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
     .readouts { grid-area: read; padding: 18px var(--gutter) 6px; max-width: none; }
@@ -134,13 +132,12 @@
   }
   @media (max-height: 760px) and (min-width: 861px) {
     .panel { padding: 14px 16px 12px; }
-    .panel header { padding-bottom: 10px; }
     .group { padding: 11px 0; }
     .swatch .chip { height: 34px; }
     .slider + .slider { margin-top: 8px; }
     .checks { margin-top: 10px; }
     .btn { padding: 7px 10px; }
-    .masthead h1 { font-size: clamp(52px, 6.4vw, 96px); margin: 12px 0 14px; }
+    .masthead h1 { font-size: clamp(52px, 6.4vw, 96px); margin: 0 0 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     canvas { transition: none; }
@@ -162,13 +159,11 @@
   </div>
 
   <header class="masthead">
-    <div class="kicker">材質研究 / 第 010 號</div>
     <h1><span>狐狸</span><span>果凍。</span></h1>
     <p class="caption">一隻藍色小狐狸。<br>晃個不停。<br>請溫柔一點。</p>
   </header>
 
   <aside class="panel" aria-label="標本控制">
-    <header><span class="label">標本</span><span>圖 10</span></header>
     <div class="group">
       <span class="label">工具</span>
       <div class="tools" role="group" aria-label="工具">
@@ -1050,6 +1045,24 @@ class SoftBody {
     this.floorY = 0;
     this.maxSpeed = 12;
 
+    // whole-piece shape memory (see solveShape): rest centroid and mass per piece, a warm-started
+    // rotation, how far a particle may stray before it is drawn back at all, and how strongly
+    this.shapeHold = 0.03;
+    this.shapeSlack = 0.08;
+    this.shapePull = new Float32Array(this.n * 3);
+    this.compMass = new Float64Array(this.nComp);
+    this.compRest = new Float64Array(this.nComp * 3);
+    for (let i = 0; i < this.n; i++) {
+      const c = this.comp[i], m = this.mass[i];
+      this.compMass[c] += m;
+      for (let k = 0; k < 3; k++) this.compRest[3 * c + k] += m * rest[3 * i + k];
+    }
+    for (let c = 0; c < this.nComp; c++) for (let k = 0; k < 3; k++) this.compRest[3 * c + k] /= this.compMass[c];
+    this.compRot = new Float64Array(this.nComp * 4);
+    for (let c = 0; c < this.nComp; c++) this.compRot[4 * c + 3] = 1;
+    this.compRotWarm = false;
+    this.compAcc = new Float64Array(this.nComp * 12);
+
     this.blade = null;
     // grab state
     this.grabIdx = new Int32Array(this.n);
@@ -1057,6 +1070,8 @@ class SoftBody {
     this.grabOff = new Float32Array(this.n * 3);
     this.grabN = 0;
     this.grabTarget = new Float32Array(3);
+    this.grabPos = new Float32Array(3);     // where the hand is now: chases grabTarget
+    this.grabSpeed = 9;
     this.grabRot = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
     this.grabbing = false;
 
@@ -1138,6 +1153,7 @@ class SoftBody {
       this.grabN = 1;
     }
     this.grabTarget.set(hit);
+    this.grabPos.set(hit);
     this.grabStart = Float32Array.from(hit);
     this.grabRot.set([1, 0, 0, 0, 1, 0, 0, 0, 1]);
     this.grabbing = true;
@@ -1190,6 +1206,7 @@ class SoftBody {
     if (this.grabbing) this.solveGrab(dt);
     this.solveTets(dt);
     this.solveVolumes(dt);
+    this.solveShape();
     if (this.nComp > 1 && (this.subIndex++ & 1) === 0) this.collidePieces();
     if (this.blade && this.blade.mode) this.solveBlade();
     this.solveFloor();
@@ -1241,7 +1258,14 @@ class SoftBody {
   solveGrab(dt) {
     const { x, invMass } = this;
     const a = 2e-6 / (dt * dt);
-    const R = this.grabRot, T = this.grabTarget;
+    const R = this.grabRot, T = this.grabPos;
+    // the hand cannot outrun the jelly: it follows the pointer at a bounded speed, so a flick of
+    // the wrist pulls the piece along instead of whipping it into a knot
+    {
+      const G = this.grabTarget, gx = G[0] - T[0], gy = G[1] - T[1], gz = G[2] - T[2];
+      const gl = Math.hypot(gx, gy, gz), f = Math.min(1, this.grabSpeed * dt / (gl || 1));
+      T[0] += gx * f; T[1] += gy * f; T[2] += gz * f;
+    }
     for (let k = 0; k < this.grabN; k++) {
       const i = this.grabIdx[k], w = invMass[i];
       const ox = this.grabOff[3 * k], oy = this.grabOff[3 * k + 1], oz = this.grabOff[3 * k + 2];
@@ -1357,6 +1381,80 @@ class SoftBody {
     }
   }
 
+  // Whole-piece shape memory: particles that have strayed far from where the piece's rest shape
+  // would put them — laid over its own centroid and best-fit rotation — are drawn back toward it.
+  // Within the slack nothing happens, so the wobble is untouched; but a thin piece that is
+  // whipped about can no longer fold over on itself and crumple, which nothing else would stop
+  // (there is no self-collision).
+  solveShape() {
+    const { x, rest, mass, comp, n, nComp, compMass, compRest, compRot: Q, compAcc: A } = this;
+    const hold = this.shapeHold;
+    if (hold <= 0) return;
+    // per piece: centroid (0..2), then the covariance of current vs rest positions (3..11)
+    A.fill(0);
+    for (let i = 0; i < n; i++) {
+      const o = 12 * comp[i], m = mass[i];
+      A[o] += m * x[3 * i]; A[o + 1] += m * x[3 * i + 1]; A[o + 2] += m * x[3 * i + 2];
+    }
+    for (let c = 0; c < nComp; c++) { A[12 * c] /= compMass[c]; A[12 * c + 1] /= compMass[c]; A[12 * c + 2] /= compMass[c]; }
+    for (let i = 0; i < n; i++) {
+      const c = comp[i], o = 12 * c, m = mass[i];
+      const px = (x[3 * i] - A[o]) * m, py = (x[3 * i + 1] - A[o + 1]) * m, pz = (x[3 * i + 2] - A[o + 2]) * m;
+      const qx = rest[3 * i] - compRest[3 * c], qy = rest[3 * i + 1] - compRest[3 * c + 1], qz = rest[3 * i + 2] - compRest[3 * c + 2];
+      A[o + 3] += px * qx; A[o + 4] += px * qy; A[o + 5] += px * qz;
+      A[o + 6] += py * qx; A[o + 7] += py * qy; A[o + 8] += py * qz;
+      A[o + 9] += pz * qx; A[o + 10] += pz * qy; A[o + 11] += pz * qz;
+    }
+    // best rotation per piece (Müller et al.), carried over from the last substep
+    const iters = this.compRotWarm ? 2 : 40;
+    this.compRotWarm = true;
+    if (!this.compR || this.compR.length !== nComp * 9) { this.compR = new Float64Array(nComp * 9); this.compC = new Float64Array(nComp * 3); }
+    const R = this.compR;
+    for (let c = 0; c < nComp; c++) {
+      const o = 12 * c + 3, r = 9 * c;
+      this.compC[3 * c] = A[12 * c]; this.compC[3 * c + 1] = A[12 * c + 1]; this.compC[3 * c + 2] = A[12 * c + 2];
+      let qx = Q[4 * c], qy = Q[4 * c + 1], qz = Q[4 * c + 2], qw = Q[4 * c + 3];
+      for (let it = 0; ; it++) {
+        R[r] = 1 - 2 * (qy * qy + qz * qz); R[r + 1] = 2 * (qx * qy - qw * qz); R[r + 2] = 2 * (qx * qz + qw * qy);
+        R[r + 3] = 2 * (qx * qy + qw * qz); R[r + 4] = 1 - 2 * (qx * qx + qz * qz); R[r + 5] = 2 * (qy * qz - qw * qx);
+        R[r + 6] = 2 * (qx * qz - qw * qy); R[r + 7] = 2 * (qy * qz + qw * qx); R[r + 8] = 1 - 2 * (qx * qx + qy * qy);
+        if (it === iters) break;
+        let ox = 0, oy = 0, oz = 0, den = 0;
+        for (let col = 0; col < 3; col++) {
+          const rx = R[r + col], ry = R[r + 3 + col], rz = R[r + 6 + col], ax = A[o + col], ay = A[o + 3 + col], az = A[o + 6 + col];
+          ox += ry * az - rz * ay; oy += rz * ax - rx * az; oz += rx * ay - ry * ax; den += rx * ax + ry * ay + rz * az;
+        }
+        const sc = 1 / (Math.abs(den) + 1e-12);
+        const wx = ox * sc, wy = oy * sc, wz = oz * sc, w = Math.hypot(wx, wy, wz);
+        if (w < 1e-9) continue;
+        const h = Math.min(w, 2) / 2, sn = Math.sin(h) / w, cs = Math.cos(h);
+        const ax = wx * sn, ay = wy * sn, az = wz * sn;
+        const nx = cs * qx + ax * qw + ay * qz - az * qy, ny = cs * qy - ax * qz + ay * qw + az * qx;
+        const nz = cs * qz + ax * qy - ay * qx + az * qw, nw = cs * qw - ax * qx - ay * qy - az * qz;
+        const l = Math.hypot(nx, ny, nz, nw); qx = nx / l; qy = ny / l; qz = nz / l; qw = nw / l;
+      }
+      Q[4 * c] = qx; Q[4 * c + 1] = qy; Q[4 * c + 2] = qz; Q[4 * c + 3] = qw;
+    }
+    // pull per particle, growing from nothing at the slack distance to the full hold well past it
+    const pull = this.shapePull, slack = this.shapeSlack;
+    A.fill(0);
+    for (let i = 0; i < n; i++) {
+      const c = comp[i], o = 12 * c, r = 9 * c, m = mass[i];
+      const qx = rest[3 * i] - compRest[3 * c], qy = rest[3 * i + 1] - compRest[3 * c + 1], qz = rest[3 * i + 2] - compRest[3 * c + 2];
+      const dx = this.compC[3 * c] + R[r] * qx + R[r + 1] * qy + R[r + 2] * qz - x[3 * i];
+      const dy = this.compC[3 * c + 1] + R[r + 3] * qx + R[r + 4] * qy + R[r + 5] * qz - x[3 * i + 1];
+      const dz = this.compC[3 * c + 2] + R[r + 6] * qx + R[r + 7] * qy + R[r + 8] * qz - x[3 * i + 2];
+      const f = hold * Math.min(1, Math.max(0, (Math.hypot(dx, dy, dz) - slack) / (3 * slack)));
+      pull[3 * i] = dx * f; pull[3 * i + 1] = dy * f; pull[3 * i + 2] = dz * f;
+      A[o] += m * dx * f; A[o + 1] += m * dy * f; A[o + 2] += m * dz * f;
+    }
+    // less the piece's average pull, so the piece as a whole is not pushed anywhere
+    for (let i = 0; i < n; i++) {
+      const c = comp[i], o = 12 * c, M = compMass[c];
+      x[3 * i] += pull[3 * i] - A[o] / M; x[3 * i + 1] += pull[3 * i + 1] - A[o + 1] / M; x[3 * i + 2] += pull[3 * i + 2] - A[o + 2] / M;
+    }
+  }
+
   // pieces push each other apart: particle spheres of different pieces may not overlap.
   // Only pairs of pieces whose bounding boxes touch are examined, and only the particles
   // inside the shared region — so pieces lying apart cost almost nothing.
@@ -1395,13 +1493,16 @@ class SoftBody {
           const d2 = dx * dx + dy * dy + dz * dz;
           if (d2 >= D * D || d2 < 1e-12) continue;
           const d = Math.sqrt(d2), wp = invMass[p], wq = invMass[q];
-          // gentle: a few millimetres per pass, so freshly cut faces ease apart instead of popping
-          const gap = Math.min(D - d, 0.006), push = gap / (d * (wp + wq));
+          // how far the pair closed in during this substep, along the line between them
+          const closing = Math.max(0, -((x[3 * q] - prev[3 * q] - x[3 * p] + prev[3 * p]) * dx + (x[3 * q + 1] - prev[3 * q + 1] - x[3 * p + 1] + prev[3 * p + 1]) * dy
+            + (x[3 * q + 2] - prev[3 * q + 2] - x[3 * p + 2] + prev[3 * p + 2]) * dz) / d);
+          // A fast approach is stopped outright (this pass covers two substeps of it), so a piece
+          // swung into another shoves it instead of sinking in. Beyond that the push is gentle, a
+          // few millimetres per pass, so freshly cut faces ease apart instead of popping.
+          const gap = Math.min(D - d, 0.006 + 2 * closing), push = gap / (d * (wp + wq));
           // The push may stop the pair closing in, but must not send them apart: whatever part of it
-          // is not spent on this substep's approach is taken out of the velocity again (s → 1).
-          const closing = -((x[3 * q] - prev[3 * q] - x[3 * p] + prev[3 * p]) * dx + (x[3 * q + 1] - prev[3 * q + 1] - x[3 * p + 1] + prev[3 * p + 1]) * dy
-            + (x[3 * q + 2] - prev[3 * q + 2] - x[3 * p + 2] + prev[3 * p + 2]) * dz) / d;
-          const s = 1 - Math.min(1, Math.max(0, closing) / gap);
+          // is not spent on the approach is taken out of the velocity again (s → 1).
+          const s = 1 - Math.min(1, closing / gap);
           const mp = -push * wp, mq = push * wq;
           acc[3 * p] += dx * mp; acc[3 * p + 1] += dy * mp; acc[3 * p + 2] += dz * mp; hits[p]++;
           acc[3 * q] += dx * mq; acc[3 * q + 1] += dy * mq; acc[3 * q + 2] += dz * mq; hits[q]++;
