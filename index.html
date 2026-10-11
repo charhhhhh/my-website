@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>狐狸果凍</title>
+<title>軟爛胡言</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 2l4 3h4l4-3v8l-6 5-6-5z' fill='%2385c8dd'/%3E%3Ccircle cx='5.6' cy='8' r='1.5' fill='%23323e87'/%3E%3Ccircle cx='10.4' cy='8' r='1.5' fill='%23323e87'/%3E%3C/svg%3E">
-<meta name="description" content="一隻可以拉扯、搖晃、切開的軟體果凍狐狸——四面體 XPBD 物理模擬與 WebGPU 果凍渲染。">
+<meta name="description" content="一隻可以拉扯、搖晃、切開的軟體果凍胡言——四面體 XPBD 物理模擬與 WebGPU 果凍渲染。">
 <style>
   :root {
     --bg: #E2DFDA;
@@ -146,7 +146,7 @@
 </head>
 <body>
   <div class="stage" id="stage">
-    <canvas id="gl" aria-label="互動式 3D 果凍，形狀是一隻藍色小狐狸。拖曳可以拉扯它，或切換成刀子，在上面畫一條線把它切成小塊。" role="img"></canvas>
+    <canvas id="gl" aria-label="互動式 3D 胡言。" role="img"></canvas>
     <svg class="stroke" id="stroke" aria-hidden="true"><line id="strokeLine" x1="0" y1="0" x2="0" y2="0"/></svg>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="fallback" id="fallback" hidden>
@@ -159,8 +159,8 @@
   </div>
 
   <header class="masthead">
-    <h1><span>狐狸</span><span>果凍。</span></h1>
-    <p class="caption">一隻藍色小狐狸。<br>晃個不停。<br>請溫柔一點。</p>
+    <h1><span>軟爛</span><span>胡言</span></h1>
+    <p class="caption">如果你看扁我，我就扁扁地走開。<br>如果你小看我，我就小小地走開。<br>如果你惹毛我，我就毛茸茸地走開。</p>
   </header>
 
   <aside class="panel" aria-label="標本控制">
@@ -2806,13 +2806,13 @@ async function main() {
       const p = pick(rayFrom(ax + (bx - ax) * t, ay + (by - ay) * t));
       if (p && lastPickTri >= 0) { hit.add(vComp[index[lastPickTri]]); yTop = Math.max(yTop, p[1]); if (t0 < 0) t0 = t; t1 = t; }
     }
-    if (!hit.size) return { miss: '沒切到，請把刀劃過狐狸。' };
-    if (pieces.length + hit.size > MAX_PIECES) return { miss: '已經夠多塊了。按「重置」換一隻新的狐狸。' };
+    if (!hit.size) return { miss: '沒切到，請把刀劃過胡言。' };
+    if (pieces.length + hit.size > MAX_PIECES) return { miss: '已經夠多塊了。按「重置」換一隻新的胡言。' };
     // the stroke as seen on the surface it was drawn over
     const at = t => rayPlaneY(rayFrom(ax + (bx - ax) * t, ay + (by - ay) * t), yTop);
     const A = at(0) || at(t0), B = at(1) || at(t1);
     const A2 = at(t0), B2 = at(t1);
-    if (!A || !B || !A2 || !B2) return { miss: '沒切到，請把刀劃過狐狸。' };
+    if (!A || !B || !A2 || !B2) return { miss: '沒切到，請把刀劃過胡言。' };
     let dx = B[0] - A[0], dz = B[2] - A[2];
     const dl = Math.hypot(dx, dz); if (dl < 0.05) return { miss: '' };
     dx /= dl; dz /= dl;
@@ -2852,8 +2852,8 @@ async function main() {
         next.push(m);
       });
     });
-    if (next.length > MAX_PIECES) return { miss: '已經夠多塊了。按「重置」換一隻新的狐狸。' };
-    if (!cut) return { miss: thin ? '那裡太薄，切不下去。' : '沒切到，請把刀劃過狐狸。' };
+    if (next.length > MAX_PIECES) return { miss: '已經夠多塊了。按「重置」換一隻新的胡言。' };
+    if (!cut) return { miss: thin ? '那裡太薄，切不下去。' : '沒切到，請把刀劃過胡言。' };
     // do the expensive part now, while the knife is still in the air
     const w = buildWorld(next);
     const ns = new SoftBody(w.sim, { firmness: sim.firmness, damping: sim.damping });
