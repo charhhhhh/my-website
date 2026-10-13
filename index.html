@@ -3072,7 +3072,7 @@ fn oetf(c: vec3f) -> vec3f {
       const scheme = /Edg\//.test(ua) ? 'edge' : 'chrome';
       return intro + [
         // `1. 開啟 ${scheme}://settings/system，打開圖硬體加速。（Use graphics acceleration when available）`,
-        `打開 ${scheme}://flags/ \n 搜尋 enable-unsafe-webgpu 設為 Enabled` + (linux ? `\n nable-vulkan 也設為 Enabled` : ''),
+        `打開 ${scheme}://flags/ \n 搜尋 enable-unsafe-webgpu 設為 Enabled` + (linux ? `\n enable-vulkan 也設為 Enabled` : ''),
       ].join('\n');
     }
     function showFallback(title, detail) {
