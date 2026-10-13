@@ -3123,8 +3123,8 @@ fn oetf(c: vec3f) -> vec3f {
       } catch (err) {
         console.warn(err);
         const msg = String(err && err.message || err);
-        if (msg === 'no-webgpu') showFallback('這個標本需要 WebGPU。', '你的瀏覽器沒有提供 navigator.gpu，所以沒有東西可以拿來渲染。與其用次一級的渲染器假裝果凍，這個研究寧可保持黑暗。請改用最新版的 Chrome、Edge 或 Safari（或 Windows 上的 Firefox），並開啟硬體加速。');
-        else if (msg === 'no-adapter') showFallback('找不到 WebGPU 顯示卡。', adapterHelp());
+        if (msg === 'no-webgpu') showFallback('這個標本需要 WebGPU。', '你的瀏覽器沒有提供 navigator.gpu，所以沒有東西可以拿來渲染。請改用最新版的 Chrome、Edge 或 Safari（或 Windows 上的 Firefox），並開啟硬體加速。');
+        else if (msg === 'no-adapter') showFallback('找不到 WebGPU ', adapterHelp());
         else showFallback('渲染器無法啟動。', msg.slice(0, 400));
         return;
       }
