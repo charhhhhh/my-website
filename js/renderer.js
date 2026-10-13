@@ -1,12 +1,13 @@
 // ─────────────────────────────────────────────────────────────
 //  WebGPU renderer
 //  passes: key-light shadow map · top-down height map (contact AO)
-//          · scene (floor, bubbles, knife; MSAA) · body back-face depth
-//          · body in its material (refraction/absorption, or opaque; MSAA) + mesh overlay · tone map
+//          · scene (floor, bubbles, the tools; MSAA) · body back-face depth
+//          · body in its material (refraction/absorption, or opaque; MSAA) + mesh overlay
+//            + particles · tone map
 // ─────────────────────────────────────────────────────────────
 // plain script, not a module, so the page also works opened straight from disk (file://);
 // top-level names are shared with the other files, which index.html loads in order.
-// needs: shaders.js
+// needs: shaders.js, particles.js
 'use strict';
 
 // ── tiny mat4 helpers (column-major, WebGPU clip z ∈ [0,1]) ──
@@ -59,7 +60,8 @@ const M4 = {
 };
 
 const MSAA = 4;
-const UBO_SIZE = 464;
+const UBO_SIZE = 880;
+const MAX_MARKS = 24;      // keep in step with the marks array in shaders.js
 
 class Renderer {
   static async create(canvas, mesh, simEdges, nParticles, arts) {
@@ -106,7 +108,10 @@ class Renderer {
 
     this.buildPipelines();
     this.w = 0; this.h = 0;
-    this.knifeVisible = false;
+    this.props = [];
+    this.particleData = new Float32Array(MAX_PARTICLES * PARTICLE_FLOATS);
+    this.particleInst = device.createBuffer({ size: this.particleData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    this.particleCount = 0;
   }
 
   // a drawing as an sRGB texture with a full mip chain, each level drawn down from the one before
@@ -148,24 +153,25 @@ class Renderer {
     });
   }
 
-  // the knife is a small rigid mesh posed on the CPU each frame
-  setKnife(k) {
+  // a tool is a small rigid mesh posed on the CPU each frame: the caller fills `dyn` (position and
+  // normal per vertex) and says whether it is to be seen
+  addProp(k) {
     const device = this.device;
     const nK = k.rest.length / 3;
-    this.knifeDyn = new Float32Array(nK * 6);
-    this.knifeDynBuf = device.createBuffer({ size: this.knifeDyn.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    const dyn = new Float32Array(nK * 6);
+    const dynBuf = device.createBuffer({ size: dyn.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     const st = new Float32Array(nK * 4);
     for (let i = 0; i < nK; i++) { st[4 * i] = k.rest[3 * i]; st[4 * i + 1] = k.rest[3 * i + 1]; st[4 * i + 2] = k.rest[3 * i + 2]; st[4 * i + 3] = k.mat[i]; }
     const mk = (data, usage) => { const b = device.createBuffer({ size: Math.ceil(data.byteLength / 4) * 4, usage: usage | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(b, 0, data); return b; };
-    this.knifeStatic = mk(st, GPUBufferUsage.VERTEX);
-    this.knifeIdx = mk(k.index, GPUBufferUsage.INDEX);
-    this.knifeCount = k.index.length;
+    const prop = { dyn, dynBuf, staticBuf: mk(st, GPUBufferUsage.VERTEX), idxBuf: mk(k.index, GPUBufferUsage.INDEX), count: k.index.length, visible: false };
+    this.props.push(prop);
+    return prop;
   }
 
   // (re)build every mesh-sized GPU buffer — at start and after each knife cut, never while dragging
   setMesh(mesh, simEdges, nParticles) {
     const device = this.device;
-    for (const b of ['dynBuf', 'staticBuf', 'indexBuf', 'lineIdx', 'particleBuf']) if (this[b]) this[b].destroy();
+    for (const b of ['dynBuf', 'staticBuf', 'fxBuf', 'indexBuf', 'lineIdx', 'particleBuf']) if (this[b]) this[b].destroy();
     this.mesh = mesh;
     this.nV = mesh.rest.length / 3;
     const buf = (data, usage) => {
@@ -180,6 +186,10 @@ class Renderer {
     const st = new Float32Array(this.nV * 4);
     for (let i = 0; i < this.nV; i++) { st[4 * i] = mesh.tex[2 * i]; st[4 * i + 1] = mesh.rest[3 * i + 1]; st[4 * i + 2] = mesh.tex[2 * i + 1]; st[4 * i + 3] = mesh.mat[i]; }
     this.staticBuf = buf(st, GPUBufferUsage.VERTEX);
+    // what the tools have done to each vertex: how hot it is, how burnt (updated only while that changes)
+    this.fx = new Float32Array(this.nV * 2);
+    this.fxBuf = device.createBuffer({ size: Math.max(8, this.fx.byteLength), usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    this.fxDirty = false;
     this.indexBuf = buf(mesh.index, GPUBufferUsage.INDEX);
     this.lineIdx = buf(simEdges, GPUBufferUsage.INDEX);
     this.lineCount = simEdges.length;
@@ -194,6 +204,7 @@ class Renderer {
       scene: d.createShaderModule({ label: 'scene', code: WGSL_SCENE }),
       back: d.createShaderModule({ label: 'back', code: WGSL_BACK }),
       main: d.createShaderModule({ label: 'main', code: WGSL_MAIN }),
+      fx: d.createShaderModule({ label: 'fx', code: WGSL_FX }),
       post: d.createShaderModule({ label: 'post', code: WGSL_POST }),
     };
     const uboEntry = { binding: 0, visibility: V | F, buffer: { type: 'uniform' } };
@@ -224,6 +235,7 @@ class Renderer {
       { arrayStride: 24, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }] },
       { arrayStride: 16, attributes: [{ shaderLocation: 2, offset: 0, format: 'float32x3' }, { shaderLocation: 3, offset: 12, format: 'float32' }] },
     ];
+    const bodyVB = [...meshVB, { arrayStride: 8, attributes: [{ shaderLocation: 4, offset: 0, format: 'float32x2' }] }];
     const HDR = 'rgba16float';
     const ms = { count: MSAA };
 
@@ -264,7 +276,7 @@ class Renderer {
     });
     this.pJelly = d.createRenderPipeline({
       label: 'jelly', layout: pl(this.layoutMain),
-      vertex: { module: this.modules.main, entryPoint: 'vsJelly', buffers: meshVB },
+      vertex: { module: this.modules.main, entryPoint: 'vsJelly', buffers: bodyVB },
       fragment: { module: this.modules.main, entryPoint: 'fsJelly', targets: [{ format: HDR }] },
       primitive: { topology: 'triangle-list', cullMode: 'back' },
       depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
@@ -281,6 +293,26 @@ class Renderer {
       },
       primitive: { topology: 'line-list' },
       depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
+      multisample: ms,
+    });
+    // particles: one quad per instance, drawn over everything else; premultiplied, so the same
+    // pipeline does glowing ones (no alpha: their light is added) and smoke (alpha: it covers)
+    this.pParticles = d.createRenderPipeline({
+      label: 'particles', layout: pl(this.layoutU),
+      vertex: {
+        module: this.modules.fx, entryPoint: 'vs', buffers: [{
+          arrayStride: PARTICLE_FLOATS * 4, stepMode: 'instance',
+          attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x4' }, { shaderLocation: 1, offset: 16, format: 'float32x4' }, { shaderLocation: 2, offset: 32, format: 'float32x4' }],
+        }],
+      },
+      fragment: {
+        module: this.modules.fx, entryPoint: 'fs', targets: [{
+          format: HDR,
+          blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } },
+        }],
+      },
+      primitive: { topology: 'triangle-strip' },
+      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
       multisample: ms,
     });
     this.pPost = d.createRenderPipeline({
@@ -348,15 +380,25 @@ class Renderer {
     u.set([params.exposure, params.meshAlpha, 0, params.kind], 104);
     u.set([...params.bg, 1], 108);
     u.set([...params.shadowTint, 1], 112);
+    // one moving light (the flame, a muzzle flash): where, how fast it falls off, its colour —
+    // and what the tools have left on the body
+    u.set([...params.lamp.p, params.lamp.fall], 116);
+    u.set([...params.lamp.col, params.markN], 120);
+    u.set(params.marks, 124);
     this.device.queue.writeBuffer(this.ubo, 0, u);
     this.device.queue.writeBuffer(this.lightUbo, 0, light.lightVP);
     this.device.queue.writeBuffer(this.topUbo, 0, light.topVP);
   }
 
-  uploadGeometry(particles, showMesh) {
-    this.device.queue.writeBuffer(this.dynBuf, 0, this.dyn);
-    if (this.knifeVisible && this.knifeDynBuf) this.device.queue.writeBuffer(this.knifeDynBuf, 0, this.knifeDyn);
-    if (showMesh) this.device.queue.writeBuffer(this.particleBuf, 0, particles);
+  // simParticles: the body's own (for the mesh overlay); fxParticles: what the tools throw off
+  uploadGeometry(simParticles, showMesh, fxParticles) {
+    const q = this.device.queue;
+    q.writeBuffer(this.dynBuf, 0, this.dyn);
+    if (this.fxDirty) { q.writeBuffer(this.fxBuf, 0, this.fx); this.fxDirty = false; }
+    for (const p of this.props) if (p.visible) q.writeBuffer(p.dynBuf, 0, p.dyn);
+    if (showMesh) q.writeBuffer(this.particleBuf, 0, simParticles);
+    this.particleCount = fxParticles ? fxParticles.count : 0;
+    if (this.particleCount) q.writeBuffer(this.particleInst, 0, fxParticles.data, 0, this.particleCount * PARTICLE_FLOATS);
   }
 
   capture() { return new Promise(r => { this.captureResolve = r; }); }
@@ -367,16 +409,16 @@ class Renderer {
     const enc = d.createCommandEncoder();
 
     // shadow map from the key light, and a top-down height map for contact occlusion
-    const knife = this.knifeVisible && this.knifeDynBuf;
+    const props = this.props.filter(k => k.visible);
     for (const [tex, bg] of [[this.shadowTex, this.bgLight], [this.topTex, this.bgTop]]) {
       const p = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: tex.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
       p.setPipeline(this.pDepth); p.setBindGroup(0, bg);
       p.setVertexBuffer(0, this.dynBuf); p.setIndexBuffer(this.indexBuf, 'uint32');
       p.drawIndexed(m.body.count, 1, 0, 0, 0);
-      // the knife casts a shadow but stays out of the contact-occlusion height map
-      if (knife && tex === this.shadowTex) {
-        p.setVertexBuffer(0, this.knifeDynBuf); p.setIndexBuffer(this.knifeIdx, 'uint32');
-        p.drawIndexed(this.knifeCount, 1, 0, 0, 0);
+      // the tools cast shadows but stay out of the contact-occlusion height map
+      if (tex === this.shadowTex) for (const k of props) {
+        p.setVertexBuffer(0, k.dynBuf); p.setIndexBuffer(k.idxBuf, 'uint32');
+        p.drawIndexed(k.count, 1, 0, 0, 0);
       }
       p.end();
     }
@@ -391,10 +433,10 @@ class Renderer {
       p.setPipeline(this.pProps);
       p.setVertexBuffer(0, this.dynBuf); p.setVertexBuffer(1, this.staticBuf); p.setIndexBuffer(this.indexBuf, 'uint32');
       if (m.bubbles.count) p.drawIndexed(m.bubbles.count, 1, m.bubbles.first, 0, 0);
-      // the knife lives in the scene pass, so the part buried in the jelly is seen refracted through it
-      if (knife) {
-        p.setVertexBuffer(0, this.knifeDynBuf); p.setVertexBuffer(1, this.knifeStatic); p.setIndexBuffer(this.knifeIdx, 'uint32');
-        p.drawIndexed(this.knifeCount, 1, 0, 0, 0);
+      // the tools live in the scene pass, so what is buried in the jelly is seen refracted through it
+      for (const k of props) {
+        p.setVertexBuffer(0, k.dynBuf); p.setVertexBuffer(1, k.staticBuf); p.setIndexBuffer(k.idxBuf, 'uint32');
+        p.drawIndexed(k.count, 1, 0, 0, 0);
       }
       p.end();
     }
@@ -418,12 +460,17 @@ class Renderer {
       p.setBindGroup(0, this.bgMain);
       p.setPipeline(this.pCopy); p.draw(3);
       p.setPipeline(this.pJelly);
-      p.setVertexBuffer(0, this.dynBuf); p.setVertexBuffer(1, this.staticBuf); p.setIndexBuffer(this.indexBuf, 'uint32');
+      p.setVertexBuffer(0, this.dynBuf); p.setVertexBuffer(1, this.staticBuf); p.setVertexBuffer(2, this.fxBuf); p.setIndexBuffer(this.indexBuf, 'uint32');
       p.drawIndexed(m.body.count, 1, 0, 0, 0);
       if (showMesh) {
         p.setPipeline(this.pLines);
         p.setVertexBuffer(0, this.particleBuf); p.setIndexBuffer(this.lineIdx, 'uint32');
         p.drawIndexed(this.lineCount, 1, 0, 0, 0);
+      }
+      if (this.particleCount) {
+        p.setPipeline(this.pParticles); p.setBindGroup(0, this.bgU);
+        p.setVertexBuffer(0, this.particleInst);
+        p.draw(4, this.particleCount, 0, 0);
       }
       p.end();
     }

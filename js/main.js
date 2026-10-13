@@ -125,7 +125,7 @@ async function main() {
       if (recoveries++ < 2) {
         try {
           const fresh = await Renderer.create(canvas, renderMesh, sim.edges, sim.n, arts);
-          fresh.useArt(look); fresh.dyn = dyn; fresh.setKnife(knifeMesh); renderer = fresh; wire(fresh); resize();
+          fresh.useArt(look); fresh.dyn = dyn; mountProps(fresh); renderer = fresh; wire(fresh); resize();
           requestAnimationFrame(frame);
           return;
         } catch (e) { console.warn(e); }
@@ -146,17 +146,42 @@ async function main() {
 
 
   // ── skinning: every render vertex (body, bubbles) follows its tetrahedron ──
+  // …and so does what a flame has done to it: how hot it is there, and how burnt
+  let fxLive = false;
   function skin() {
-    const x = sim.x;
+    const x = sim.x, live = sim.marked, heat = sim.heat, char = sim.char, fx = renderer.fx;
     for (let v = 0; v < nV; v++) {
       const i4 = 4 * v, o = 6 * v;
-      const a = 3 * skinIdx[i4], b = 3 * skinIdx[i4 + 1], c = 3 * skinIdx[i4 + 2], d = 3 * skinIdx[i4 + 3];
+      const ia = skinIdx[i4], ib = skinIdx[i4 + 1], ic = skinIdx[i4 + 2], id = skinIdx[i4 + 3];
+      const a = 3 * ia, b = 3 * ib, c = 3 * ic, d = 3 * id;
       const w0 = skinW[i4], w1 = skinW[i4 + 1], w2 = skinW[i4 + 2], w3 = skinW[i4 + 3];
       dyn[o] = x[a] * w0 + x[b] * w1 + x[c] * w2 + x[d] * w3;
       dyn[o + 1] = x[a + 1] * w0 + x[b + 1] * w1 + x[c + 1] * w2 + x[d + 1] * w3;
       dyn[o + 2] = x[a + 2] * w0 + x[b + 2] * w1 + x[c + 2] * w2 + x[d + 2] * w3;
-      dyn[o + 3] = 0; dyn[o + 4] = 0; dyn[o + 5] = 0;
+      if (live) {
+        fx[2 * v] = heat[ia] * w0 + heat[ib] * w1 + heat[ic] * w2 + heat[id] * w3;
+        fx[2 * v + 1] = char[ia] * w0 + char[ib] * w1 + char[ic] * w2 + char[id] * w3;
+      }
     }
+    if (live) renderer.fxDirty = true;
+    else if (fxLive) { fx.fill(0); renderer.fxDirty = true; }
+    fxLive = live;
+    skinNormals();
+    // A rigid body cannot give, so where a flame eats it away that is only drawn: the burnt surface
+    // is set back along its normal — less on the walls, which would meet in the thin places.
+    const shrink = live && sim.rigid ? material.shrink : 0;
+    if (shrink > 0) {
+      for (let v = 0, o = 0; v < nV; v++, o += 6) {
+        const burn = fx[2 * v + 1];
+        if (burn <= 0.004) continue;
+        const s = shrink * Math.min(1, burn) * (0.3 + 0.7 * Math.abs(dyn[o + 4]));
+        dyn[o] -= dyn[o + 3] * s; dyn[o + 1] -= dyn[o + 4] * s; dyn[o + 2] -= dyn[o + 5] * s;
+      }
+      skinNormals();
+    }
+  }
+  function skinNormals() {
+    for (let o = 3; o < dyn.length; o += 6) { dyn[o] = 0; dyn[o + 1] = 0; dyn[o + 2] = 0; }
     for (let t = 0; t < index.length; t += 3) {
       const a = 6 * index[t], b = 6 * index[t + 1], c = 6 * index[t + 2];
       const e1x = dyn[b] - dyn[a], e1y = dyn[b + 1] - dyn[a + 1], e1z = dyn[b + 2] - dyn[a + 2];
@@ -257,7 +282,7 @@ async function main() {
     const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]; const l = Math.hypot(...d);
     return { o: a, d: d.map(v => v / l) };
   }
-  let lastPickTri = -1;
+  let lastPickTri = -1, lastPickU = 0, lastPickV = 0;
   function pick(ray) {
     let best = Infinity;
     const { o, d } = ray;
@@ -274,7 +299,7 @@ async function main() {
       const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
       const vv = (d[0] * qx + d[1] * qy + d[2] * qz) * inv; if (vv < 0 || uu + vv > 1) continue;
       const tt = (e2x * qx + e2y * qy + e2z * qz) * inv;
-      if (tt > 1e-4 && tt < best) { best = tt; lastPickTri = t; }
+      if (tt > 1e-4 && tt < best) { best = tt; lastPickTri = t; lastPickU = uu; lastPickV = vv; }
     }
     return best < Infinity ? [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best] : null;
   }
@@ -422,13 +447,24 @@ async function main() {
         }
         if (ns.x[3 * i + 1] < 0) ns.x[3 * i + 1] = 0;
       }
+      // the heat and the burns stay with the matter they are in
+      if (old.marked) {
+        for (let i = 0; i < ns.n; i++) {
+          const t = e.tetOf[i];
+          let h = 0, c = 0;
+          for (let j = 0; j < 4; j++) { const q = old.tets[4 * t + j]; h += old.heat[q] * e.w[4 * i + j]; c += old.char[q] * e.w[4 * i + j]; }
+          ns.heat[i] = Math.min(1, Math.max(0, h)); ns.char[i] = Math.min(1, Math.max(0, c));
+        }
+        ns.hot = old.hot; ns.marked = true;
+        ns.remelt();
+      }
       for (const sp of sep) for (let i = 0; i < ns.n; i++) if (ns.comp[i] === sp.piece) {
         ns.v[3 * i] += sp.dir[0] * sepSpeed; ns.v[3 * i + 1] += Math.abs(sp.dir[1]) * 0.2 * hop + hop; ns.v[3 * i + 2] += sp.dir[2] * sepSpeed;
       }
       ns.prev.set(ns.x);
     }
     pieces = nextPieces; world = w; sim = ns;
-    sim.blade = blade;
+    sim.blade = blade; sim.pushers = pushers;
     blade.side = new Int8Array(sim.nComp);
     for (const sp of sep) blade.side[sp.piece] = Math.sign(sp.dir[0] * blade.n[0] + sp.dir[2] * blade.n[2]) || 0;
     renderMesh = w.render; nV = renderMesh.rest.length / 3;
@@ -442,7 +478,11 @@ async function main() {
 
   // ── the visible knife: hovers under the pointer, lines up over the stroke, then cuts ──
   const knifeMesh = buildKnifeMesh();
-  renderer.setKnife(knifeMesh);
+  const toolMesh = { torch: buildTorchMesh(), hammer: buildHammerMesh(), bat: buildBatMesh(), gun: buildGunMesh() };
+  // every tool is a prop of the renderer's, posed here each frame; a rebuilt renderer needs them again
+  const props = {};
+  const mountProps = r => { props.knife = r.addProp(knifeMesh); for (const k in toolMesh) props[k] = r.addProp(toolMesh[k]); };
+  mountProps(renderer);
   const HOVER_H = 0.42;                           // edge height above the top of the jelly while hovering
   const kp = { P: [0, SHAPE.T + HOVER_H + 1.4, 0.9], yaw: -0.62, roll: 0.16, pitch: 0.05 };
   const blade = { holdY: 0, mode: null, p: [0, 0, 0], d: [1, 0, 0], n: [0, 0, 1], a0: -KNIFE.xr, a1: KNIFE.Lb - KNIFE.xr, top: KNIFE.H * 0.95, halfGap: 0.03, side: null };
@@ -463,7 +503,7 @@ async function main() {
   }
   function poseKnife() {
     const [X, Y, Z] = knifeBasis(kp.yaw, kp.roll, kp.pitch);
-    const out = renderer.knifeDyn, r = knifeMesh.rest, nr = knifeMesh.nrm, P = kp.P, xr = KNIFE.xr;
+    const out = props.knife.dyn, r = knifeMesh.rest, nr = knifeMesh.nrm, P = kp.P, xr = KNIFE.xr;
     for (let v = 0, o = 0; v < r.length; v += 3, o += 6) {
       const lx = r[v] - xr, ly = r[v + 1], lz = r[v + 2];
       out[o] = P[0] + X[0] * lx + Y[0] * ly + Z[0] * lz;
@@ -543,13 +583,418 @@ async function main() {
     }
   }
   function updateKnife(dt, animDt) {
-    if (state.tool !== 'knife' && !knifeAnim) { renderer.knifeVisible = false; blade.mode = null; return; }
+    if (state.tool !== 'knife' && !knifeAnim) { props.knife.visible = false; blade.mode = null; return; }
     if (knifeAnim) runKnifeAnim(animDt);
     else easeToward(drag.mode === 'knife' ? strokePose() : hoverPose(), 1 - Math.exp(-dt * 16));
     blade.p = kp.P; blade.d = [Math.cos(kp.yaw), 0, Math.sin(kp.yaw)];
     if (!knifeAnim || !knifeAnim.committed) blade.n = [-blade.d[2], 0, blade.d[0]];
     poseKnife();
-    renderer.knifeVisible = true;
+    props.knife.visible = true;
+  }
+  // ── the other tools: blowtorch, hammer, bat, pistol ──
+  // Each is a prop that follows the spot the pointer is on, and a short piece of choreography when
+  // it is used. What comes of it — how far the body gives, what flies off, what is left behind and
+  // what it sounds like — is up to the material (see materials.js).
+  const particles = new Particles();
+  const pushers = [];
+  sim.pushers = pushers;
+  const up3 = [0, 1, 0];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const add3 = (a, b, s = 1) => [a[0] + b[0] * s, a[1] + b[1] * s, a[2] + b[2] * s];
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm3 = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const near3 = (p, r) => [p[0] + rnd(-r, r), p[1] + rnd(-r, r), p[2] + rnd(-r, r)];
+  const camRight = () => [Math.cos(state.az), 0, -Math.sin(state.az)];
+  const camNear = () => [Math.sin(state.az), 0, Math.cos(state.az)];   // level, toward the viewer
+  // a frame whose x axis runs along d, with y as near to straight up as that allows
+  const frameAlong = d => { const Z = norm3(cross3(d, up3)); return [d, cross3(Z, d), Z]; };
+  function poseProp(name, P, X, Y, Z, slide = 0) {
+    const m = toolMesh[name], out = props[name].dyn, r = m.rest, nr = m.nrm, part = m.part;
+    for (let v = 0, o = 0, i = 0; v < r.length; v += 3, o += 6, i++) {
+      const lx = r[v] + (part[i] ? slide : 0), ly = r[v + 1], lz = r[v + 2];
+      out[o] = P[0] + X[0] * lx + Y[0] * ly + Z[0] * lz;
+      out[o + 1] = P[1] + X[1] * lx + Y[1] * ly + Z[1] * lz;
+      out[o + 2] = P[2] + X[2] * lx + Y[2] * ly + Z[2] * lz;
+      const nx = nr[v], ny = nr[v + 1], nz = nr[v + 2];
+      out[o + 3] = X[0] * nx + Y[0] * ny + Z[0] * nz;
+      out[o + 4] = X[1] * nx + Y[1] * ny + Z[1] * nz;
+      out[o + 5] = X[2] * nx + Y[2] * ny + Z[2] * nz;
+    }
+    props[name].visible = true;
+  }
+
+  // what blows and bullets leave on the body, in the rest plane — so they stay where they are on
+  // the drawing, whatever is cut from it (the newest replace the oldest).
+  // kinds: keep in step with marks() in shaders.js
+  const MARK = { hole: 1, dent: 2, scuff: 3 };
+  const marks = new Float32Array(MAX_MARKS * 4);
+  let markN = 0, markAt = 0;
+  function addMark(uw, radius, kind) {
+    marks.set([uw[0], uw[1], radius, kind], 4 * markAt);
+    markAt = (markAt + 1) % MAX_MARKS; markN = Math.min(markN + 1, MAX_MARKS);
+  }
+  // the point of the drawing under the last pick…
+  function pickedRest() {
+    const tex = renderMesh.tex, a = 2 * index[lastPickTri], b = 2 * index[lastPickTri + 1], c = 2 * index[lastPickTri + 2], w = 1 - lastPickU - lastPickV;
+    return [tex[a] * w + tex[b] * lastPickU + tex[c] * lastPickV, tex[a + 1] * w + tex[b + 1] * lastPickU + tex[c + 1] * lastPickV];
+  }
+  // …and the point of it that the world point p shows, on piece c — as near as the piece's own frame can tell
+  function restOf(p, c) {
+    const F = sim.pieceFrame(c), R = F.R, d = sub3(p, F.cw);
+    return [R[0] * d[0] + R[3] * d[1] + R[6] * d[2] + F.cr[0], R[2] * d[0] + R[5] * d[1] + R[8] * d[2] + F.cr[2]];
+  }
+  // one moving light, for whatever is brightest just now: the flame, a muzzle flash, a shower of sparks
+  const lamp = { p: [0, 1, 0], col: [0, 0, 0], fall: 2 };
+  function flash(p, col, fall) { lamp.p = p; lamp.col = col; lamp.fall = fall; }
+  function clearTraces() { markN = markAt = 0; particles.clear(); lamp.col = [0, 0, 0]; }
+
+  // where a tool points: the spot under the pointer — on the body if it is there, else on the table.
+  // p follows it smoothly (k: how much of the way it goes this frame); raw is the spot itself.
+  const aim = { p: [0, SHAPE.T, 1], raw: [0, SHAPE.T, 1], on: false, comp: -1, lift: 0 };
+  function takeAim(k) {
+    let p = null, on = false;
+    if (hoverSeen) {
+      const ray = rayFrom(hoverX, hoverY);
+      p = pick(ray); on = !!p;
+      if (!p) {
+        p = rayPlaneY(ray, 0);
+        if (p) { const dx = p[0] - target[0], dz = p[2] - target[2], dl = Math.hypot(dx, dz); if (dl > 3.4) { p[0] = target[0] + dx / dl * 3.4; p[2] = target[2] + dz / dl * 3.4; } }
+      }
+    }
+    if (!p) { const c = sim.centroid(); p = [c[0], c[1] + SHAPE.T / 2, c[2]]; }
+    aim.raw = p; aim.on = on; aim.comp = on ? vComp[index[lastPickTri]] : -1;
+    aim.p = lerp3(aim.p, p, k);
+  }
+
+  // what flies off the body where it is struck: n of them from p, mostly along d
+  const spray = (d, wide, speed) => { const v = norm3([d[0] + rnd(-wide, wide), d[1] + rnd(-wide, wide), d[2] + rnd(-wide, wide)]), s = speed * rnd(0.35, 1); return [v[0] * s, v[1] * s, v[2] * s]; };
+  const debris = {
+    // jelly: drops of itself
+    drops(p, d, n, speed) {
+      const c = FOX.tint.map(v => srgbToLin(v / 255) * 0.9);
+      for (let k = 0; k < n; k++) { const s = rnd(0.016, 0.036); particles.emit({ p: near3(p, 0.05), v: spray(d, 0.8, speed), life: rnd(0.5, 0.9), s0: s, s1: s * 0.7, c0: c, c1: c, a0: 0.8, a1: 0.6, grav: 1, drag: 0.4, hard: true, bounce: 0.05 }); }
+    },
+    // rubber, and the table: a puff of dust
+    dust(p, d, n, speed) {
+      for (let k = 0; k < n; k++) particles.emit({ p: near3(p, 0.04), v: spray(d, 0.9, speed * 0.5), life: rnd(0.35, 0.6), s0: 0.04, s1: rnd(0.11, 0.17), c0: [0.5, 0.48, 0.45], c1: [0.6, 0.58, 0.55], a0: 0.26, a1: 0, drag: 6 });
+    },
+    // styrofoam: loose beads, all but weightless
+    crumbs(p, d, n, speed) {
+      const c = [0.92, 0.92, 0.9];
+      for (let k = 0; k < n; k++) { const s = rnd(0.011, 0.022); particles.emit({ p: near3(p, 0.06), v: spray(d, 0.9, speed), life: rnd(1.2, 2.4), s0: s, s1: s, c0: c, c1: c, a0: 1, a1: 1, grav: 0.3, drag: 2.6, hard: true, bounce: 0.35 }); }
+    },
+    // metal: sparks
+    sparks(p, d, n, speed) {
+      for (let k = 0; k < n; k++) particles.emit({ p: near3(p, 0.02), v: spray(d, 0.9, speed * 1.6), life: rnd(0.18, 0.5), s0: 0.011, s1: 0.004, c0: [7, 3.6, 1.1], c1: [3, 0.6, 0.05], glow: true, grav: 0.7, drag: 1.2, streak: 0.03, bounce: 0.45 });
+      flash(add3(p, up3, 0.1), [1.5, 0.95, 0.4], 3);
+    },
+  };
+  // the body has been struck at p by something coming along dir: what flies off (n, at up to
+  // `speed`), and how it sounds (how loud, how high)
+  function struck(p, dir, n, speed, loud, pitch) {
+    debris[material.debris](p, norm3([-dir[0] * 0.5, Math.abs(dir[1]) * 0.5 + 0.6, -dir[2] * 0.5]), n, speed);
+    SFX.hit(material.id, loud, pitch);
+  }
+  // a thin bright line from a along d: the path of a bullet, gone almost before it is seen
+  function tracer(a, d, len) {
+    particles.emit({ p: add3(a, d, len / 2), v: d, life: 0.07, s0: 0.009, s1: 0.004, c0: [4.5, 3.6, 2], c1: [2, 1.2, 0.4], glow: true, streak: len / 2 });
+  }
+
+  // What is hot enough to burn goes on smoking after the flame has left it — and, if the material
+  // holds a flame, burning. A few particles of the body are looked at each frame.
+  function smoulder(adt) {
+    const m = material;
+    if (!sim.hot || adt <= 0 || !m.fume) return;
+    const tries = 24, per = sim.n / tries * adt, x = sim.x, c = m.fume;
+    for (let k = 0; k < tries; k++) {
+      const i = (Math.random() * sim.n) | 0, h = sim.heat[i];
+      if (h <= m.ignite) continue;
+      const p = [x[3 * i], x[3 * i + 1] + 0.04, x[3 * i + 2]];
+      if (Math.random() < h * m.fumes * per) particles.emit({ p: near3(p, 0.05), v: [rnd(-0.12, 0.12), rnd(0.5, 1), rnd(-0.12, 0.12)], life: rnd(0.7, 1.4), s0: 0.04, s1: rnd(0.14, 0.24), c0: c, c1: c, a0: c[3], a1: 0, grav: -0.04, drag: 0.7, swell: 0.12 });
+      if (h > 0.55 && Math.random() < h * m.flame * 3 * per) particles.emit({ p: near3(p, 0.04), v: [rnd(-0.1, 0.1), rnd(0.5, 1.1), rnd(-0.1, 0.1)], life: rnd(0.18, 0.34), s0: rnd(0.04, 0.065), s1: 0.012, c0: [1.6, 0.8, 0.1], c1: [1, 0.16, 0.01], glow: true, cover: 0.9, hard: 0.4, grav: -0.25 });
+    }
+  }
+
+  // ── blowtorch: held down, it plays a flame on the spot the pointer is on ──
+  const torch = { on: false, due: 0, lick: 0 };
+  function lightTorch(on) {
+    on = !!on && state.tool === 'torch' && !state.paused;
+    if (on === torch.on) return;
+    torch.on = on;
+    SFX.torch(on);
+  }
+  function updateTorch(adt) {
+    const r = camRight(), c = camNear();
+    const off = norm3([r[0] * 0.5 + c[0] * 0.3, 0.7, r[2] * 0.5 + c[2] * 0.3]);
+    const N = add3(aim.p, off, TORCH.reach), X = [-off[0], -off[1], -off[2]];
+    N[1] += aim.lift;
+    poseProp('torch', N, ...frameAlong(X));
+    if (!torch.on || adt <= 0) return;
+    // The flame is a jet of glowing blobs, each living just long enough to reach whatever is in its
+    // way: blue ones where it leaves the nozzle, a pale core, and an orange mantle round that.
+    const hit = pick({ o: N, d: X });
+    const reach = hit ? Math.hypot(...sub3(hit, N)) : Infinity;
+    const len = Math.min(TORCH.flame, reach, -N[1] / X[1]), end = add3(N, X, len);
+    for (torch.due += adt * 280; torch.due >= 1; torch.due--) {
+      const sp = rnd(4.4, 6.2), v = norm3([X[0] + rnd(-0.06, 0.06), X[1] + rnd(-0.06, 0.06), X[2] + rnd(-0.06, 0.06)]).map(q => q * sp);
+      const kind = Math.random();
+      if (kind < 0.2) particles.emit({ p: add3(N, X, rnd(0, 0.03)), v, life: 0.4 * len / sp, s0: 0.022, s1: 0.03, c0: [0.15, 0.5, 2.2], c1: [0.2, 0.4, 1.3], glow: true, cover: 0.9, hard: 0.5, streak: 0.012 });
+      else if (kind < 0.5) particles.emit({ p: add3(N, X, rnd(0.03, 0.1)), v, life: 0.75 * len / sp, s0: 0.016, s1: 0.034, c0: [1.9, 1.6, 0.75], c1: [1.7, 0.9, 0.12], glow: true, cover: 0.9, hard: 0.5, streak: 0.014 });
+      else particles.emit({ p: add3(N, X, rnd(0.02, 0.1)), v, life: (len + 0.04) / sp, s0: 0.022, s1: rnd(0.05, 0.075), c0: [1.5, 0.62, 0.06], c1: [0.95, 0.16, 0.01], glow: true, cover: 0.9, hard: 0.4, streak: 0.012 });
+    }
+    // where it meets something, it spreads out over it
+    if (len < TORCH.flame - 0.01) for (torch.lick += adt * 90; torch.lick >= 1; torch.lick--) {
+      const a = rnd(0, 2 * Math.PI), s = rnd(0.8, 2.2);
+      particles.emit({ p: add3(end, up3, 0.02), v: [Math.cos(a) * s, rnd(0.15, 0.9), Math.sin(a) * s], life: rnd(0.1, 0.22), s0: 0.03, s1: 0.075, c0: [1.6, 0.75, 0.08], c1: [0.95, 0.15, 0.01], glow: true, cover: 0.85, hard: 0.4, drag: 3 });
+    }
+    const flicker = rnd(0.85, 1.15);
+    flash(add3(end, up3, 0.15), [1.0 * flicker, 0.5 * flicker, 0.16 * flicker], 2.2);
+    if (hit && reach <= TORCH.flame) {
+      sim.heatAt(hit, 0.3, material.heatUp * adt);
+      if (Math.random() < adt * 26) SFX.sizzle(material.id);
+    }
+  }
+
+  // ── hammer: comes down on the spot the pointer is on ──
+  // A soft body is pressed in under the face (see SoftBody.solvePushers) and springs back; a rigid
+  // one takes the blow as it is.
+  const hammer = { t: -1, hit: false, th: 0, th0: 0, p: null, soft: false, depth: 0, bounce: 0 };
+  const HAMMER_REST = 0.62, HAMMER_BACK = 1.25;   // how far the head is raised while it waits, and at the top of the swing (rad)
+  // the hammer turned up by th about the hand, which is placed so that at th = 0 the face lies flat
+  // on p (or `sink` below it): the hand, the frame, and where the face is
+  function hammerPose(p, th, sink) {
+    const r = camRight(), c = camNear(), hd = norm3([r[0] * 0.82 + c[0] * 0.57, 0, r[2] * 0.82 + c[2] * 0.57]);   // from the head back to the hand
+    const { L, face } = HAMMER, ct = Math.cos(th), st = Math.sin(th);
+    const G = [p[0] + hd[0] * L, p[1] + face - sink, p[2] + hd[2] * L];
+    const X = [-hd[0] * ct, st, -hd[2] * ct], Y = [hd[0] * st, ct, hd[2] * st];
+    return { G, X, Y, Z: cross3(X, Y), f: [G[0] + X[0] * L - Y[0] * face, G[1] + X[1] * L - Y[1] * face, G[2] + X[2] * L - Y[2] * face] };
+  }
+  // how deep the face is in a soft body, t seconds after it landed: in, a moment's rest, out again
+  const hammerSink = t => hammer.depth * (t < 0.07 ? 1 - (1 - t / 0.07) ** 2 : t < 0.13 ? 1 : 1 - ease((t - 0.13) / 0.16));
+  function landHammer(f, c) {
+    const m = material, h = hammer;
+    h.soft = c >= 0 && !sim.rigid;
+    h.depth = h.soft ? m.squash * SHAPE.T : 0;
+    h.bounce = c < 0 ? 0.12 : m.rebound * 0.45;
+    if (c < 0) { SFX.thud(1); debris.dust(f, up3, 6, 1.6); return; }   // the table
+    if (!h.soft) {
+      // a rigid piece takes it whole: down — and so, off-centre, up at its far end — and keeps the dent
+      sim.punch(c, f, [0, -1, 0], 3.2 * m.blow);
+      addMark(restOf(f, c), m.dent, MARK.dent);
+    }
+    struck(f, [0, -1, 0], 16, 3.2, 1, 1);
+  }
+  function updateHammer(adt) {
+    const h = hammer;
+    let p = aim.p, th = HAMMER_REST, sink = -aim.lift;
+    if (h.t >= 0) {
+      h.t += adt;
+      p = h.p; sink = 0;
+      if (!h.hit) {
+        // back, then down, faster and faster, until the face meets something
+        const s = h.t / 0.09;
+        th = s < 1 ? lerp(HAMMER_REST, HAMMER_BACK, ease(s)) : HAMMER_BACK * (1 - ((h.t - 0.09) / 0.1) ** 2);
+        const f = hammerPose(p, th, 0).f;
+        let top = sim.topUnder(f[0], f[2], HAMMER.R);
+        const c = top > 0 ? sim.topComp : -1;
+        if (c < 0) top = 0;
+        if (s >= 1 && f[1] <= top) {
+          // it has landed somewhere on the way from last frame's angle to this one's: find where
+          let lo = th, hi = h.th;
+          for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (hammerPose(p, mid, 0).f[1] > top) hi = mid; else lo = mid; }
+          th = hi;
+          landHammer(hammerPose(p, th, 0).f, c);
+          h.hit = true; h.t = 0; h.th0 = th;
+        }
+        h.th = th;
+      }
+      if (h.hit) {
+        // it rests where it landed — sunk in, if the body gave — then is thrown back as hard as
+        // the material does that, and returns to the pointer
+        const t = h.t, u = Math.min(1, t / 0.55);
+        sink = hammerSink(t);
+        th = h.th0 + (HAMMER_REST - h.th0) * ease((t - 0.1) / 0.45) + h.bounce * Math.sin(Math.PI * Math.pow(u, 0.6)) * (1 - u);
+        p = lerp3(h.p, aim.p, ease((t - 0.2) / 0.35));
+        if (h.soft && t < 0.3) {
+          const f = hammerPose(p, th, sink).f;
+          pushers.push({ c: f, r: HAMMER.R, h: HAMMER.head, vy: -(hammerSink(t + sim.stepDt) - sink) / sim.stepDt, touched: 0 });
+        }
+        if (t >= 0.58) h.t = -1;
+      }
+    }
+    const q = hammerPose(p, th, sink);
+    poseProp('hammer', q.G, q.X, q.Y, q.Z);
+  }
+
+  // ── baseball bat: swings level through the spot the pointer is on ──
+  // The blow goes from the pointer's side of the piece toward its middle, so where it is hit
+  // chooses which way it flies. The bat is given by where its knob is (O) and which way it points,
+  // seen from above (psi); it always dips a little toward the barrel.
+  const bat = { t: -1, O: [0, 1, 1], psi: 0, d: [1, 0, 0], F: null, from: null, phi: 0, hit: false, w: 0, at: 0 };
+  const BAT_REST = -0.5, BAT_BACK = -1.9, BAT_END = 1.2, BAT_DIP = 0.16, BAT_PULL = 67;   // angles of the swing (rad; 0 is where it meets the spot), and how hard it is pulled round (rad/s²)
+  const bonkEl = $('#bonk');
+  function bonk(p) {
+    const r = canvas.getBoundingClientRect(), M = cam.viewProj;
+    const w = M[3] * p[0] + M[7] * p[1] + M[11] * p[2] + M[15];
+    bonkEl.style.left = `${((M[0] * p[0] + M[4] * p[1] + M[8] * p[2] + M[12]) / w * 0.5 + 0.5) * r.width}px`;
+    bonkEl.style.top = `${(0.5 - (M[1] * p[0] + M[5] * p[1] + M[9] * p[2] + M[13]) / w * 0.5) * r.height}px`;
+    bonkEl.style.setProperty('--tilt', `${rnd(-16, 16)}deg`);
+    bonkEl.classList.remove('on'); void bonkEl.offsetWidth;   // a second one restarts the animation
+    bonkEl.classList.add('on');
+  }
+  // which way a blow at the spot aimed at would go
+  function batDir() {
+    if (!aim.on) return camRight();
+    const c = sim.pieceCentre(aim.comp), dx = c[0] - aim.raw[0], dz = c[2] - aim.raw[2], dl = Math.hypot(dx, dz);
+    return dl > 0.2 ? [dx / dl, 0, dz / dl] : bat.d;   // (dead centre: as before)
+  }
+  // The swing that sends the spot p along d. The bat lies across d as it passes p — handle toward
+  // the viewer — and turns about its knob: O is where that is, psi0 the way it points at that
+  // moment, and sgn the sense it turns in.
+  function batSwing(p, d) {
+    let a = [-d[2], 0, d[0]], sgn = 1;
+    const n = camNear(), r = camRight();
+    if (a[0] * (n[0] + 0.35 * r[0]) + a[2] * (n[2] + 0.35 * r[2]) > 0) { a = [d[2], 0, -d[0]]; sgn = -1; }
+    const reach = BAT.sweet * Math.cos(BAT_DIP);
+    // the barrel meets the middle of the slab, and clears the table
+    const y = Math.max(BAT.R + 0.04, p[1] - SHAPE.T / 2) + BAT.sweet * Math.sin(BAT_DIP);
+    return { O: [p[0] - a[0] * reach, y, p[2] - a[2] * reach], psi0: Math.atan2(a[2], a[0]), sgn };
+  }
+  function batPose(O, psi) {
+    const ct = Math.cos(BAT_DIP), st = Math.sin(BAT_DIP), cx = Math.cos(psi), cz = Math.sin(psi);
+    const X = [cx * ct, -st, cz * ct], Y = [cx * st, ct, cz * st];
+    return { O, X, Y, Z: cross3(X, Y) };
+  }
+  function landBat(hits, q, sgn) {
+    const m = material;
+    // the barrel is travelling level, across the bat; what it hits goes that way, and up a little
+    const dir = norm3([sgn * q.X[2], 0.28, -sgn * q.X[0]]);
+    let first = null;
+    for (const [c, h] of hits) {
+      const p = [h[1], h[2], h[3]];
+      if (sim.rigid) sim.punch(c, p, dir, 8 * m.blow); else sim.whack(p, dir, 9, 0.75, m.carry, c);
+      if (m.dent) addMark(restOf(p, c), m.dent * 0.9, MARK.dent);
+      struck(p, dir, 12, 4, 1, 0.85);
+      first = first || p;
+    }
+    SFX.bonk(); bonk(first);
+    // what the blow leaves the bat: a slow follow-through, or — off something springy — a jump back
+    bat.w = 2.2 * (1 - 2.4 * m.rebound);
+  }
+  function updateBat(dt, adt) {
+    const b = bat, k = 1 - Math.exp(-dt * 12);
+    // where it waits: drawn back a little, ready to go through the spot aimed at
+    const want = batDir(), ang = Math.atan2(b.d[2], b.d[0]) + wrapA(Math.atan2(want[2], want[0]) - Math.atan2(b.d[2], b.d[0])) * k;
+    b.d = [Math.cos(ang), 0, Math.sin(ang)];
+    const W = batSwing(aim.p, b.d), restO = [W.O[0], W.O[1] + 0.12 + aim.lift, W.O[2]], restPsi = W.psi0 - W.sgn * BAT_REST;
+    if (b.t < 0) {
+      b.O = lerp3(b.O, restO, k); b.psi += wrapA(restPsi - b.psi) * k;
+    } else {
+      b.t += adt;
+      const F = b.F, t = b.t;
+      if (t < 0.1) {
+        // back
+        const s = ease(t / 0.1);
+        b.O = lerp3(b.from.O, F.O, s); b.psi = b.from.psi + wrapA(F.psi0 - F.sgn * BAT_BACK - b.from.psi) * s;
+        b.phi = BAT_BACK;
+      } else if (!b.hit && b.phi < BAT_END) {
+        // round, faster and faster, until the barrel runs into something — looked for at every
+        // few centimetres of its way, since it covers a good deal of ground between two frames
+        const to = Math.min(BAT_END, BAT_BACK + 0.5 * BAT_PULL * (t - 0.1) ** 2), steps = Math.max(1, Math.ceil((to - b.phi) / 0.05));
+        for (let i = 1; i <= steps && !b.hit; i++) {
+          const phi = b.phi + (to - b.phi) * i / steps, q = batPose(F.O, F.psi0 - F.sgn * phi);
+          const hits = phi > -1 ? sim.rodHits(add3(q.O, q.X, BAT.from), add3(q.O, q.X, BAT.L - 0.06), BAT.R + 0.02) : null;
+          if (hits && hits.size) { landBat(hits, q, F.sgn); b.hit = true; b.at = t; b.phi = phi; }
+        }
+        if (!b.hit) b.phi = to;
+        if (!b.hit && b.phi >= BAT_END) { b.at = t; b.w = 0; }
+        b.O = F.O; b.psi = F.psi0 - F.sgn * b.phi;
+      } else {
+        // after the blow (or the miss): what is left of the swing runs out, and the bat comes back
+        const s = t - b.at, back = ease((s - 0.22) / 0.4);
+        const phi = b.phi + b.w / 6 * (1 - Math.exp(-6 * s));
+        b.O = lerp3(F.O, restO, back); b.psi = F.psi0 - F.sgn * phi + wrapA(restPsi - (F.psi0 - F.sgn * phi)) * back;
+        if (s >= 0.62) b.t = -1;
+      }
+    }
+    const q = batPose(b.O, b.psi);
+    poseProp('bat', q.O, q.X, q.Y, q.Z);
+  }
+
+  // ── pistol: three shots at the spot the pointer is on, each a little off the last ──
+  const gun = { t: -1, shots: 0, kick: 0, slide: 0 };
+  function fire(M, X, Y, Z) {
+    const m = material, a = rnd(0, 2 * Math.PI), s = rnd(0, 0.075);
+    const d = norm3(sub3(add3(add3(aim.p, Y, Math.cos(a) * s), Z, Math.sin(a) * s), M));
+    const hit = pick({ o: M, d });
+    const c = hit ? vComp[index[lastPickTri]] : -1, uw = hit ? pickedRest() : null;
+    const end = hit || add3(M, d, d[1] < -1e-3 ? -M[1] / d[1] : 6);
+    gun.kick = 1; gun.slide = 1;
+    SFX.shot();
+    // at the muzzle: the flash, a wisp of smoke, and the spent case thrown clear
+    flash(add3(M, d, 0.1), [2.4, 1.8, 0.95], 2.5);
+    particles.emit({ p: add3(M, d, 0.08), v: [0, 0, 0], life: 0.07, s0: 0.3, s1: 0.2, c0: [1.2, 0.8, 0.35], c1: [0.6, 0.25, 0.05], glow: true });
+    for (let k = 0; k < 6; k++) particles.emit({ p: add3(M, d, 0.02 + 0.042 * k), v: [d[0] * k, d[1] * k, d[2] * k], life: 0.06, s0: 0.1 - 0.013 * k, s1: 0.05 - 0.006 * k, c0: [3, 2.5, 1.5], c1: [1.8, 0.8, 0.1], glow: true, cover: 0.9, hard: 0.45 });
+    for (let k = 0; k < 3; k++) particles.emit({ p: add3(M, d, 0.08), v: near3([d[0], d[1] + 0.4, d[2]], 0.5), life: rnd(0.4, 0.7), s0: 0.04, s1: 0.13, c0: [0.6, 0.6, 0.6], c1: [0.6, 0.6, 0.6], a0: 0.2, a1: 0, drag: 3, swell: 0.04 });
+    const e = GUN.eject, out = rnd(1.4, 2.2), upw = rnd(1.6, 2.4), backw = rnd(-0.6, -0.1);
+    particles.emit({
+      p: [M[0] + X[0] * e[0] + Y[0] * e[1] + Z[0] * e[2], M[1] + X[1] * e[0] + Y[1] * e[1] + Z[1] * e[2], M[2] + X[2] * e[0] + Y[2] * e[1] + Z[2] * e[2]],
+      v: [Z[0] * out + Y[0] * upw + X[0] * backw, Z[1] * out + Y[1] * upw + X[1] * backw, Z[2] * out + Y[2] * upw + X[2] * backw],
+      life: 1.6, s0: 0.016, s1: 0.016, c0: [0.75, 0.52, 0.2], c1: [0.75, 0.52, 0.2], a0: 1, a1: 1, grav: 1, hard: true, bounce: 0.4, streak: 0.012,
+    });
+    tracer(M, d, Math.hypot(...sub3(end, M)));
+    if (c < 0) { SFX.thud(0.35); debris.dust(end, up3, 4, 1.2); return; }   // into the table
+    // a soft body takes it where it lands — deep, if it is turned away; a rigid piece takes it whole
+    if (sim.rigid) sim.punch(c, hit, d, 2.4 * m.blow); else sim.whack(hit, d, m.pierce ? 3.2 : 7.5, m.pierce ? 0.22 : 0.26);
+    addMark(uw, m.pierce ? 0.045 : 0.05, m.pierce ? MARK.hole : m.dent ? MARK.dent : MARK.scuff);
+    struck(hit, d, m.pierce ? 7 : 9, 2.6, 0.6, 1.9);
+    if (!m.pierce) {
+      // turned away, the bullet goes off somewhere else
+      tracer(hit, norm3([d[0] + rnd(-0.4, 0.4), Math.abs(d[1]) + rnd(0.1, 0.6), d[2] + rnd(-0.4, 0.4)]), 1.6);
+      SFX.ricochet();
+    }
+  }
+  function updateGun(adt) {
+    const g = gun, r = camRight(), c = camNear();
+    const off = norm3([r[0] * 0.72 + c[0] * 0.5, 0.5, r[2] * 0.72 + c[2] * 0.5]);
+    const M = add3(aim.p, off, GUN.stand), [X, Y, Z] = frameAlong([-off[0], -off[1], -off[2]]);
+    M[1] += aim.lift;
+    g.kick *= Math.exp(-adt * 12); g.slide *= Math.exp(-adt * 30);
+    if (g.t >= 0) {
+      g.t += adt;
+      while (g.shots < 3 && g.t >= g.shots * 0.13) { fire(M, X, Y, Z); g.shots++; }
+      if (g.t > 0.6) g.t = -1;
+    }
+    // recoil: the gun turns up about the wrist and comes back a little, and the slide is thrown back
+    const k = g.kick * 0.24, ck = Math.cos(k), sk = Math.sin(k), wx = -0.75, wy = -0.42;
+    const Xk = [X[0] * ck + Y[0] * sk, X[1] * ck + Y[1] * sk, X[2] * ck + Y[2] * sk], Yk = [Y[0] * ck - X[0] * sk, Y[1] * ck - X[1] * sk, Y[2] * ck - X[2] * sk];
+    const P = [0, 1, 2].map(i => M[i] + (X[i] - Xk[i]) * wx + (Y[i] - Yk[i]) * wy - X[i] * g.kick * 0.08);
+    poseProp('gun', P, Xk, Yk, Z, -g.slide * GUN.travel);
+  }
+
+  // a press with one of them (the torch is held instead: see lightTorch)
+  function useTool() {
+    const t = state.tool;
+    if (t === 'hammer' && hammer.t < 0) { hammer.t = 0; hammer.hit = false; hammer.th = HAMMER_REST; hammer.p = aim.raw.slice(); SFX.swish(0.8); }
+    if (t === 'bat' && bat.t < 0) { bat.t = 0; bat.hit = false; bat.d = batDir(); bat.F = batSwing(aim.raw, bat.d); bat.from = { O: bat.O, psi: bat.psi }; SFX.swish(1); }
+    if (t === 'gun' && gun.t < 0) { gun.t = 0; gun.shots = 0; }
+  }
+  function stopTools() {
+    lightTorch(false);
+    hammer.t = bat.t = gun.t = -1; gun.kick = gun.slide = 0;
+    pushers.length = 0;
+  }
+  function updateTools(dt, adt) {
+    for (const k in toolMesh) props[k].visible = false;
+    pushers.length = 0;
+    lamp.col = lamp.col.map(v => v * Math.exp(-dt * 22));
+    smoulder(adt);
+    const t = state.tool;
+    if (!toolMesh[t]) return;
+    takeAim(1 - Math.exp(-dt * 20));
+    aim.lift *= Math.exp(-dt * 9);
+    if (t === 'torch') updateTorch(adt); else if (t === 'hammer') updateHammer(adt); else if (t === 'bat') updateBat(dt, adt); else updateGun(adt);
   }
 
   // ── pointer interaction ──
@@ -587,6 +1032,20 @@ async function main() {
     }
     if (drag.mode) return;
     if (e.button !== undefined && e.button > 0 && e.pointerType === 'mouse') return;
+    if (toolMesh[state.tool]) {
+      // the other tools act where the pointer is: the torch for as long as it is held down, the rest once per press
+      e.preventDefault();
+      if (state.paused) return;
+      SFX.unlock();
+      hoverX = e.clientX; hoverY = e.clientY; hoverSeen = true;
+      takeAim(1);   // (a finger arrives out of nowhere: no easing over from where the last one left)
+      if (state.tool === 'torch') {
+        drag.mode = 'torch'; drag.id = e.pointerId;
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* synthetic pointer */ }
+        lightTorch(true);
+      } else useTool();
+      return;
+    }
     if (state.tool === 'knife') {
       if (state.paused || knifeAnim) { e.preventDefault(); return; }
       drag.mode = 'knife'; drag.id = e.pointerId;
@@ -621,6 +1080,7 @@ async function main() {
     }
     if (e.pointerId !== drag.id || !drag.mode) { hoverX = e.clientX; hoverY = e.clientY; hoverDirty = true; hoverSeen = true; return; }
     if (drag.mode === 'knife') { knife.bx = e.clientX; knife.by = e.clientY; drawStroke(true); return; }
+    if (drag.mode === 'torch') { hoverX = e.clientX; hoverY = e.clientY; return; }
     const dx = e.clientX - drag.lastX, dy = e.clientY - drag.lastY;
     drag.lastX = e.clientX; drag.lastY = e.clientY;
     if (drag.mode === 'grab') applyGrab(e.clientX, e.clientY);
@@ -643,8 +1103,9 @@ async function main() {
       drawStroke(false);
     }
     if (drag.mode === 'grab') sim.endGrab();
+    if (drag.mode === 'torch') lightTorch(false);
     drag.mode = null; drag.id = -1; drag.second = null;
-    canvas.dataset.cursor = state.tool === 'knife' ? 'knife' : '';
+    canvas.dataset.cursor = state.tool === 'hand' ? '' : 'aim';
     hoverDirty = true;
   };
   canvas.addEventListener('pointerup', endPointer);
@@ -703,6 +1164,7 @@ async function main() {
     knifeAnim = null; blade.mode = null;
     if (pieces.length > 1) installWorld([FOX.whole]);
     sim.reset(reduced.matches ? 0 : 0.35); acc = 0;
+    clearTraces();
   });
   // looks: each drawing is a body of its own, built the first time it is chosen
   function setLook(i) {
@@ -713,6 +1175,7 @@ async function main() {
     renderer.useArt(i);
     installWorld([FOX.whole || (FOX.whole = initialPiece())], [], null, 0, 0, false);
     sim.reset(reduced.matches ? 0 : 0.35); acc = 0;
+    clearTraces();
     setMaterial(MATERIALS.indexOf(material));   // the shadow takes its tint from the new drawing
   }
   // materials: the same pieces, made of something else — the sliders move to where it starts,
@@ -728,25 +1191,34 @@ async function main() {
   }
   let shadowTint;
   setMaterial(0);
-  // tools: hand (grab and pull) or knife (draw across the jelly to cut it)
+  // tools: hand (grab and pull), knife (draw across the jelly to cut it), and the four that are
+  // pointed at it — blowtorch (hold), hammer, bat and pistol (press)
   function setTool(t) {
     if (t === 'knife' && state.tool !== 'knife' && !knifeAnim) {
       // the knife drops in from above
       const h = hoverPose(); kp.P = [h.P[0], h.P[1] + 1.6, h.P[2]]; kp.yaw = h.yaw; kp.roll = h.roll; kp.pitch = h.pitch;
     }
+    // …and so do the others
+    if (toolMesh[t] && state.tool !== t) { takeAim(1); aim.lift = 1.6; }
+    stopTools();
     state.tool = t;
     for (const b of document.querySelectorAll('.tool')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
     document.body.dataset.tool = t;
-    canvas.dataset.cursor = t === 'knife' ? 'knife' : '';
+    canvas.dataset.cursor = t === 'hand' ? '' : 'aim';
   }
-  for (const b of document.querySelectorAll('.tool')) b.addEventListener('click', () => setTool(b.dataset.tool));
+  const toolButtons = [...document.querySelectorAll('.tool')];
+  for (const b of toolButtons) b.addEventListener('click', () => setTool(b.dataset.tool));
   setTool('hand');
+  const sound = $('#sound');
+  sound.addEventListener('change', () => { SFX.muted = !sound.checked; });
+  SFX.muted = !sound.checked;
   $('#slow').addEventListener('change', e => { state.slow = e.target.checked; });
   $('#mesh').addEventListener('change', e => { state.showMesh = e.target.checked; });
   const pauseBtn = $('#pause');
   pauseBtn.addEventListener('click', () => {
     state.paused = !state.paused;
     if (state.paused && drag.mode === 'grab') { sim.endGrab(); drag.mode = null; }
+    if (state.paused) lightTorch(false);
     pauseBtn.textContent = state.paused ? '繼續' : '暫停';
     pauseBtn.setAttribute('aria-pressed', String(state.paused));
   });
@@ -757,6 +1229,7 @@ async function main() {
     if (e.key === 'r' || e.key === 'R') $('#reset').click();
     if (e.key === 'k' || e.key === 'K') setTool(state.tool === 'knife' ? 'hand' : 'knife');
     if (e.key === 'h' || e.key === 'H') setTool('hand');
+    if (e.key.length === 1 && e.key >= '1' && e.key <= String(toolButtons.length)) setTool(toolButtons[e.key - 1].dataset.tool);   // the tools, in the order of their buttons
     if (e.key === 'm' || e.key === 'M') setMaterial((MATERIALS.indexOf(material) + 1) % MATERIALS.length);
   });
 
@@ -775,7 +1248,8 @@ async function main() {
   // expose a small hook for automated checks
   window.__jelly = {
     sim, state, cam, pick, rayFrom, renderer, setMaterial, performCut, planCut, startCut, kp, blade, get knifeAnim() { return knifeAnim; }, setHover(x, y) { hoverX = x; hoverY = y; hoverSeen = true; },
-    advance(sec) { for (let t = 0; t < sec - 1e-6; t += 1 / 60) { updateKnife(1 / 60, 1 / 60); sim.step(); } },
+    setTool, useTool, lightTorch, aim, particles, marks, get markN() { return markN; }, get material() { return material; },
+    advance(sec) { for (let t = 0; t < sec - 1e-6; t += 1 / 60) { updateKnife(1 / 60, 1 / 60); updateTools(1 / 60, 1 / 60); skin(); sim.step(); particles.update(1 / 60); } },
     compStats() { const c = sim.nComp, out = []; for (let k = 0; k < c; k++) { let n = 0, x = 0, y = 0, z = 0, v = 0; for (let i = 0; i < sim.n; i++) if (sim.comp[i] === k) { n++; x += sim.x[3 * i]; y += sim.x[3 * i + 1]; z += sim.x[3 * i + 2]; v = Math.max(v, Math.hypot(sim.v[3 * i], sim.v[3 * i + 1], sim.v[3 * i + 2])); } out.push([x / n, y / n, z / n, v].map(q => +q.toFixed(3))); } return out; }, get pieces() { return pieces.length; }, get fps() { return fps; }
   };
 
@@ -793,20 +1267,23 @@ async function main() {
       state.time += dt;
     }
     // the knife may swap in a new world mid-cut, so it goes before skinning
-    updateKnife(dt, state.paused ? 0 : dt * (state.slow ? 0.25 : 1));
+    const adt = state.paused ? 0 : dt * (state.slow ? 0.25 : 1);
+    updateKnife(dt, adt);
+    updateTools(dt, adt);
+    particles.update(adt); particles.write();
     skin();
     followJelly(dt);
     updateCamera();
     updateLight();
     if (hoverDirty && !drag.mode) {
       hoverDirty = false;
-      canvas.dataset.cursor = state.tool === 'knife' ? 'knife' : !state.paused && (pick(rayFrom(hoverX, hoverY)) || pickNear(hoverX, hoverY, 18)) ? 'grab' : '';
+      canvas.dataset.cursor = state.tool !== 'hand' ? 'aim' : !state.paused && (pick(rayFrom(hoverX, hoverY)) || pickNear(hoverX, hoverY, 18)) ? 'grab' : '';
     }
     renderer.setUniforms(cam, light, {
       time: state.time, art: FOX.rect, gel: material.gel, kind: material.kind, shadowTint,
-      exposure: 1.0, meshAlpha: state.showMesh ? 0.32 : 0, bg: BG_RENDER,
+      exposure: 1.0, meshAlpha: state.showMesh ? 0.32 : 0, bg: BG_RENDER, lamp, marks, markN,
     });
-    renderer.uploadGeometry(sim.x, state.showMesh);
+    renderer.uploadGeometry(sim.x, state.showMesh, particles);
     renderer.draw(state.showMesh);
     if (first) { first = false; document.body.classList.add('ready'); }
     readoutT += dt; frames++; fpsT += dt;

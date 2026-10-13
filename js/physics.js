@@ -5,6 +5,7 @@
 //  · tet volume constraints        → near-incompressibility
 //  · soft grab attachment, ground contact with friction
 //  · relative-velocity damping along edges (internal viscosity)
+//  · what the tools do: blows, a hammer pressing in, and heat that burns and melts
 //  Fixed step, fixed substeps, "small steps" XPBD (1 iteration / substep).
 // ─────────────────────────────────────────────────────────────
 // plain script, not a module, so the page also works opened straight from disk (file://);
@@ -129,6 +130,17 @@ class SoftBody {
     this.compAcc = new Float64Array(this.nComp * 12);
 
     this.blade = null;
+    // what the tools leave behind (see "what the tools do to it"): how hot each particle is, how
+    // burnt, and how soft that has made it; and the shape and stiffness each tetrahedron started with
+    this.heat = new Float32Array(this.n);
+    this.char = new Float32Array(this.n);
+    this.soft = new Float32Array(this.n);
+    this.hot = false;         // something is still warm
+    this.marked = false;      // something has been heated since the last reset
+    this.tetQ0 = Float32Array.from(this.tetQ);
+    this.tetFirm0 = Float32Array.from(this.tetFirm);
+    this.restVol0 = Float32Array.from(this.restVol);
+    this.pushers = null;
     // grab state
     this.grabIdx = new Int32Array(this.n);
     this.grabW = new Float32Array(this.n);
@@ -153,6 +165,7 @@ class SoftBody {
     if (harden) this.rigidify();
     this.shapeHold = m.hold; this.shapeSlack = m.slack;
     this.friction = m.friction; this.bounce = m.bounce; this.airDrag = m.air;
+    this.remelt();
   }
 
   tetVol(p, t) {
@@ -174,6 +187,10 @@ class SoftBody {
     this.prev.set(this.x);
     this.v.fill(0);
     this.endGrab();
+    // a fresh specimen: nothing burnt, nothing melted
+    this.heat.fill(0); this.char.fill(0);
+    this.remelt();
+    this.hot = this.marked = false;
   }
 
   // stiffness mapping: firmness 0..1 → edge compliance (log scale)
@@ -259,6 +276,7 @@ class SoftBody {
     const dt = this.stepDt / sub;
     for (let s = 0; s < sub; s++) this.substep(dt);
     this.time += this.stepDt;
+    if (this.hot) this.thermal(this.stepDt);
     // settling: once the jelly is nearly still, bleed off the last residual jitter
     if (!this.grabbing) {
       const ke = this.kineticEnergy() / this.totalMass; // ≈ ½ v²
@@ -298,6 +316,7 @@ class SoftBody {
       else if ((this.subIndex++ & 1) === 0) this.collidePieces();
     }
     if (this.blade && this.blade.mode) this.solveBlade();
+    if (this.pushers && this.pushers.length && !this.rigid) this.solvePushers(dt);
     this.solveFloor();
     const inv = 1 / dt, vmax = this.maxSpeed, bounce = this.bounce, fy = this.floorY + 1e-6;
     for (let i = 0; i < 3 * n; i += 3) {
@@ -566,7 +585,8 @@ class SoftBody {
       const dy = this.compC[3 * c + 1] + R[r + 3] * qx + R[r + 4] * qy + R[r + 5] * qz - x[3 * i + 1];
       const dz = this.compC[3 * c + 2] + R[r + 6] * qx + R[r + 7] * qy + R[r + 8] * qz - x[3 * i + 2];
       // (no slack at all: a rigid piece, every particle put straight back)
-      const f = slack > 0 ? hold * Math.min(1, Math.max(0, (Math.hypot(dx, dy, dz) - slack) / (3 * slack))) : hold;
+      // (nor does a melted part remember its shape)
+      const f = slack > 0 ? hold * Math.min(1, Math.max(0, (Math.hypot(dx, dy, dz) - slack) / (3 * slack))) * (1 - this.soft[i]) : hold;
       pull[3 * i] = dx * f; pull[3 * i + 1] = dy * f; pull[3 * i + 2] = dz * f;
       A[o] += m * dx * f; A[o + 1] += m * dy * f; A[o + 2] += m * dz * f;
     }
@@ -970,6 +990,154 @@ class SoftBody {
       const imp = rv * k / ws;
       v[I] += nx * imp * wi; v[I + 1] += ny * imp * wi; v[I + 2] += nz * imp * wi;
       v[J] -= nx * imp * wj; v[J + 1] -= ny * imp * wj; v[J + 2] -= nz * imp * wj;
+    }
+  }
+
+  // ── what the tools do to it ──
+
+  // A blow to a soft body: the particles around p take up `speed` along dir, less of it the
+  // farther off they are, none at `radius`. `carry` of it goes to the whole of piece c at once, so
+  // that the piece travels and does not only wobble (c < 0: every piece within reach, no carry).
+  whack(p, dir, speed, radius, carry = 0, c = -1) {
+    const { x, v, comp, n } = this;
+    for (let i = 0; i < n; i++) {
+      if (c >= 0 && comp[i] !== c) continue;
+      const k = 3 * i, d = Math.hypot(x[k] - p[0], x[k + 1] - p[1], x[k + 2] - p[2]);
+      let f = d < radius ? 1 - d / radius : 0;
+      f = (carry + (1 - carry) * f * f * (3 - 2 * f)) * speed;
+      if (f <= 0) continue;
+      v[k] += dir[0] * f; v[k + 1] += dir[1] * f; v[k + 2] += dir[2] * f;
+    }
+  }
+
+  // The same for a rigid piece, which takes it whole: an impulse at p that gives a piece struck
+  // square on `speed` along dir — and one struck off-centre less of that, and a spin.
+  punch(c, p, dir, speed) {
+    const { x, v, compStart: S } = this, f = this.solidFrame(c, new Float64Array(13));
+    if (!f[3]) return;   // held in the hand
+    const rx = p[0] - f[0], ry = p[1] - f[1], rz = p[2] - f[2];
+    // the impulse is that of a square hit; how much of it becomes travel is up to where it lands
+    const J = speed / f[3];
+    const tx = (ry * dir[2] - rz * dir[1]) * J, ty = (rz * dir[0] - rx * dir[2]) * J, tz = (rx * dir[1] - ry * dir[0]) * J;
+    let wx = f[4] * tx + f[5] * ty + f[6] * tz, wy = f[7] * tx + f[8] * ty + f[9] * tz, wz = f[10] * tx + f[11] * ty + f[12] * tz;
+    const wl = Math.hypot(wx, wy, wz), wmax = 14;
+    if (wl > wmax) { wx *= wmax / wl; wy *= wmax / wl; wz *= wmax / wl; }
+    for (let i = S[c]; i < S[c + 1]; i++) {
+      const k = 3 * i, qx = x[k] - f[0], qy = x[k + 1] - f[1], qz = x[k + 2] - f[2];
+      v[k] += dir[0] * speed + wy * qz - wz * qy; v[k + 1] += dir[1] * speed + wz * qx - wx * qz; v[k + 2] += dir[2] * speed + wx * qy - wy * qx;
+    }
+  }
+
+  // Kinematic tools pressing on a soft body. Each is a disc facing down — the face of the hammer:
+  // centre c, radius r, with h of head above it, sinking at vy — and whatever of the body is
+  // inside the head is pushed down under the face, flat below it and rounding up around its rim.
+  // The disc moves on with every substep (main.js sets it again each frame), so the body is
+  // pressed at the speed of the tool rather than struck by its jumps from frame to frame.
+  solvePushers(dt) {
+    const { x, n } = this, rim = 0.08, low = this.floorY + 0.012;
+    for (const p of this.pushers) {
+      p.c[1] += p.vy * dt;
+      const cx = p.c[0], cy = p.c[1], cz = p.c[2], R = p.r;
+      for (let i = 0; i < n; i++) {
+        const k = 3 * i, y = x[k + 1];
+        if (y <= cy || y > cy + p.h) continue;
+        const d = Math.hypot(x[k] - cx, x[k + 2] - cz);
+        if (d >= R + rim) continue;
+        const e = d <= R ? 0 : (d - R) / rim, lim = Math.max(cy + 0.14 * e * e, low);
+        if (y > lim) { x[k + 1] = lim; p.touched++; }
+      }
+    }
+  }
+
+  // the top of the body within r of the vertical through (px, pz): how high it stands there
+  // (-Infinity where there is none of it), and — in topComp — which piece that is
+  topUnder(px, pz, r) {
+    const { x, comp, n } = this;
+    let top = -Infinity;
+    this.topComp = -1;
+    for (let i = 0; i < n; i++) {
+      const k = 3 * i;
+      if (x[k + 1] > top && Math.hypot(x[k] - px, x[k + 2] - pz) < r) { top = x[k + 1]; this.topComp = comp[i]; }
+    }
+    return top;
+  }
+
+  // what a rod from a to b of radius r has run into: for every piece it touches, how many of its
+  // particles are inside the rod and where they lie on average — Map piece → [count, x, y, z]
+  rodHits(a, b, r) {
+    const { x, comp, n } = this, hits = new Map();
+    const ex = b[0] - a[0], ey = b[1] - a[1], ez = b[2] - a[2], el = ex * ex + ey * ey + ez * ez;
+    for (let i = 0; i < n; i++) {
+      const k = 3 * i, px = x[k] - a[0], py = x[k + 1] - a[1], pz = x[k + 2] - a[2];
+      const t = Math.min(1, Math.max(0, (px * ex + py * ey + pz * ez) / el));
+      if (Math.hypot(px - ex * t, py - ey * t, pz - ez * t) > r) continue;
+      let h = hits.get(comp[i]);
+      if (!h) hits.set(comp[i], h = [0, 0, 0, 0]);
+      h[0]++; h[1] += x[k]; h[2] += x[k + 1]; h[3] += x[k + 2];
+    }
+    for (const h of hits.values()) { h[1] /= h[0]; h[2] /= h[0]; h[3] /= h[0]; }
+    return hits;
+  }
+
+  // where piece c is: its centre of mass
+  pieceCentre(c) {
+    const { x, mass, compStart: S } = this;
+    let M = 0, cx = 0, cy = 0, cz = 0;
+    for (let i = S[c]; i < S[c + 1]; i++) { const m = mass[i]; M += m; cx += m * x[3 * i]; cy += m * x[3 * i + 1]; cz += m * x[3 * i + 2]; }
+    return [cx / M, cy / M, cz / M];
+  }
+
+  // a flame playing on the point p: `amount` of heat there, less around it, none at `radius` —
+  // reaching rather deeper into the body than it spreads over it
+  heatAt(p, radius, amount) {
+    const { x, heat, n } = this;
+    for (let i = 0; i < n; i++) {
+      const k = 3 * i, d = Math.hypot(x[k] - p[0], (x[k + 1] - p[1]) * 0.6, x[k + 2] - p[2]);
+      if (d >= radius) continue;
+      const f = 1 - d / radius;
+      heat[i] = Math.min(1, heat[i] + amount * f * f * (3 - 2 * f));
+    }
+    this.hot = this.marked = true;
+  }
+
+  // One step of the heat: it spreads along the edges, leaks away — and where it is above what the
+  // material can stand, it burns that in for good.
+  thermal(dt) {
+    const m = this.material, { heat, char, edges, n } = this;
+    if (m.conduct > 0) {
+      const k = Math.min(0.4, m.conduct * dt);
+      for (let e = 0; e < this.nE; e++) {
+        const i = edges[2 * e], j = edges[2 * e + 1], q = (heat[j] - heat[i]) * k;
+        heat[i] += q; heat[j] -= q;
+      }
+    }
+    const keep = Math.exp(-m.cool * dt), span = 1 - m.ignite;
+    let any = false;
+    for (let i = 0; i < n; i++) {
+      const h = heat[i] * keep;
+      if (h > m.ignite) char[i] = Math.min(1, char[i] + (h - m.ignite) / span * m.scorch * dt);
+      heat[i] = h > 0.004 ? h : 0;
+      if (h > 0.004) any = true;
+    }
+    this.hot = any;
+    this.remelt();
+  }
+
+  // What the heat has done to the feel of the body. A burnt part (as far as the material melts)
+  // and a hot one (as far as it goes limp) is softer — its tetrahedra give more, and the piece's
+  // memory of its shape lets go of it. And a melted part sinks: the rest shape of its tetrahedra
+  // is lower, a little wider, and there is less of it.
+  remelt() {
+    if (!this.marked) return;
+    const m = this.material, { heat, char, soft, tets, tetQ, tetQ0, n } = this;
+    for (let i = 0; i < n; i++) soft[i] = Math.min(1, m.melt * char[i] + m.limp * heat[i]);
+    const sag = this.rigid ? 0 : m.sag * m.melt;
+    for (let t = 0; t < this.nT; t++) {
+      const a = tets[4 * t], b = tets[4 * t + 1], c = tets[4 * t + 2], d = tets[4 * t + 3];
+      this.tetFirm[t] = this.tetFirm0[t] * (1 + m.soften * (soft[a] + soft[b] + soft[c] + soft[d]) / 4);
+      const s = sag * (char[a] + char[b] + char[c] + char[d]) / 4, ky = 1 - s, kx = 1 + 0.3 * s;
+      for (let o = 12 * t, e = o + 12; o < e; o += 3) { tetQ[o] = tetQ0[o] * kx; tetQ[o + 1] = tetQ0[o + 1] * ky; tetQ[o + 2] = tetQ0[o + 2] * kx; }
+      this.restVol[t] = this.restVol0[t] * kx * ky * kx;
     }
   }
 

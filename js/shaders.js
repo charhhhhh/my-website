@@ -21,6 +21,9 @@ struct U {
   misc: vec4f,       // exposure, meshAlpha, floorY, material kind
   bg: vec4f,
   shadowTint: vec4f,
+  lamp: vec4f,       // a moving light (the flame, a muzzle flash): xyz, w = how fast it falls off
+  lampCol: vec4f,    // its colour; w = how many marks follow
+  marks: array<vec4f, 24>,   // what the tools left on the body: centre (u, w) in the rest plane, radius, kind
 };
 
 const PI = 3.14159265;
@@ -83,6 +86,14 @@ fn ggx(N: vec3f, V: vec3f, L: vec3f, rough: f32) -> f32 {
 }
 
 fn linearDepth(p: vec3f) -> f32 { return dot(p - u.camPos.xyz, u.camFwd.xyz); }
+
+// the moving light, as it falls on a surface at P facing N
+fn lampAt(P: vec3f, N: vec3f) -> vec3f {
+  let d = u.lamp.xyz - P;
+  let r2 = dot(d, d);
+  let k = clamp(dot(N, d) * inverseSqrt(r2 + 1e-4) * 0.75 + 0.25, 0.0, 1.0);
+  return u.lampCol.rgb * k / (1.0 + r2 * u.lamp.w);
+}
 `;
 
 const WGSL_DEPTH = /* wgsl */`
@@ -90,7 +101,7 @@ const WGSL_DEPTH = /* wgsl */`
 @vertex fn vs(@location(0) p: vec3f) -> @builtin(position) vec4f { return m * vec4f(p, 1.0); }
 `;
 
-// ── scene: background / floor with soft shadows, then bubbles and the knife ──
+// ── scene: background / floor with soft shadows, then bubbles and the tools ──
 const WGSL_SCENE = WGSL_COMMON + /* wgsl */`
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var shadowMap: texture_depth_2d;
@@ -180,6 +191,7 @@ struct BgOut { @location(0) c: vec4f };
     let shadowCol = mix(vec3f(1.0), u.shadowTint.rgb, 1.0 - sh);
     var fl = u.bg.rgb * (0.9 + 0.1 * clamp(1.0 - length(P.xz - vec2f(0.0, 0.8)) * 0.12, 0.0, 1.0));
     fl *= shadowCol;
+    fl += u.bg.rgb * lampAt(P, vec3f(0.0, 1.0, 0.0));
     fl *= 1.0 - ao * 0.72;
     let fade = smoothstep(7.0, 22.0, t);
     col = mix(fl, col, fade);
@@ -221,6 +233,38 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) wp: vec3f, @location(1
     let spec = ggx(N, V, L, max(rough, 0.1)) * u.keyDir.w;
     col = env * fres + fres * spec * 0.5 + vec3f(0.02) * max(dot(N, L), 0.0);
     col = mix(col, col * 0.85 + vec3f(0.12, 0.122, 0.125), bevel * 0.7);
+    col = min(col, vec3f(6.0));
+  } else if (i.mat > 5.5) {
+    // the other tools: steels and brass, two woods, rubber and paint — told apart by the material id
+    let m = i.mat;
+    var alb = vec3f(0.02);
+    var F0 = vec3f(0.04);
+    var rough = 0.6;
+    var metal = 0.0;
+    if (m < 6.5) {
+      let brush = vnoise(vec3f(i.rest.x * 6.0, i.rest.y * 140.0, i.rest.z * 140.0));
+      metal = 1.0;
+      if (m < 6.1) { F0 = vec3f(0.62, 0.63, 0.65); rough = 0.18 + 0.06 * brush; }             // polished steel
+      else if (m < 6.3) { F0 = vec3f(0.17, 0.175, 0.19); rough = 0.36 + 0.1 * brush; }         // dark, forged or blued
+      else { F0 = vec3f(0.88, 0.62, 0.28); rough = 0.24 + 0.06 * brush; }                      // brass
+    } else if (m < 7.5) {
+      // wood, its grain running along the tool
+      let g = fbm(vec3f(i.rest.x * 1.7, i.rest.y * 30.0 + vnoise(i.rest * 7.0) * 1.6, i.rest.z * 30.0));
+      let k = smoothstep(0.3, 0.75, g);
+      if (m < 7.1) { alb = mix(vec3f(0.4, 0.25, 0.115), vec3f(0.62, 0.44, 0.24), k); rough = 0.45; }     // ash
+      else { alb = mix(vec3f(0.03, 0.015, 0.008), vec3f(0.11, 0.055, 0.028), k); rough = 0.38; }        // walnut
+    } else if (m < 8.1) { alb = vec3f(0.022); rough = 0.62; }                                   // black rubber
+    else if (m < 8.3) { alb = vec3f(0.5, 0.03, 0.022); rough = 0.3; }                           // red paint
+    else if (m < 8.5) { alb = vec3f(0.03, 0.115, 0.4); rough = 0.3; }                           // blue paint
+    else { alb = vec3f(0.72, 0.7, 0.64); rough = 0.7; }                                         // a paper label
+    let R = reflect(-V, N);
+    // a rough surface never turns into a mirror, even at a grazing angle
+    let F = F0 + (max(vec3f(1.0 - rough), F0) - F0) * pow(1.0 - NdV, 5.0);
+    let env = min(studioEnv(R, rough, u.bg.rgb), vec3f(2.6));
+    let spec = ggx(N, V, L, rough) * u.keyDir.w * vec3f(1.0, 0.97, 0.93);
+    let amb = u.bg.rgb * mix(0.3, 0.75, N.y * 0.5 + 0.5);
+    let lit = amb + vec3f(1.0, 0.97, 0.92) * u.keyDir.w * 0.45 * clamp((dot(N, L) + 0.15) / 1.15, 0.0, 1.0) + lampAt(i.wp, N);
+    col = alb * lit * (1.0 - metal) * (vec3f(1.0) - F) + (env + spec + lampAt(i.wp, R) * 0.6) * F;
     col = min(col, vec3f(6.0));
   } else if (i.mat > 4.5) {
     // handle: dark walnut, straight grain along the handle, a satin oil finish and three steel rivets
@@ -276,12 +320,13 @@ const WGSL_MAIN = WGSL_COMMON + /* wgsl */`
   return vec4f(textureLoad(sceneTex, vec2i(fc.xy), 0).rgb, 1.0);
 }
 
-struct VIn { @location(0) p: vec3f, @location(1) n: vec3f, @location(2) rest: vec3f, @location(3) mat: f32 };
-struct VOut { @builtin(position) pos: vec4f, @location(0) wp: vec3f, @location(1) n: vec3f, @location(2) rest: vec3f };
+// fx: what the tools have done here — how hot it is (x), how burnt (y)
+struct VIn { @location(0) p: vec3f, @location(1) n: vec3f, @location(2) rest: vec3f, @location(3) mat: f32, @location(4) fx: vec2f };
+struct VOut { @builtin(position) pos: vec4f, @location(0) wp: vec3f, @location(1) n: vec3f, @location(2) rest: vec3f, @location(3) fx: vec2f };
 @vertex fn vsJelly(v: VIn) -> VOut {
   var o: VOut;
   o.pos = u.viewProj * vec4f(v.p, 1.0);
-  o.wp = v.p; o.n = v.n; o.rest = v.rest;
+  o.wp = v.p; o.n = v.n; o.rest = v.rest; o.fx = v.fx;
   return o;
 }
 
@@ -295,6 +340,36 @@ fn toUV(p: vec3f) -> vec2f {
 const K_RUBBER = 1.0;
 const K_FOAM = 2.0;
 const K_METAL = 3.0;
+
+// What the tools have left on the body, read off in the rest plane: how far the surface is pressed
+// in at q (x, negative), whether there is a hole through it (y), and how scuffed it is (z).
+// Kinds — keep in step with MARK in main.js: 1 a bullet hole, 2 a dent, 3 a scuff.
+fn marks(q: vec2f) -> vec3f {
+  var h = 0.0; var hole = 0.0; var scuff = 0.0;
+  let n = i32(u.lampCol.w);
+  for (var k = 0; k < n; k++) {
+    let m = u.marks[k];
+    let d = length(q - m.xy) / m.z;
+    let isHole = step(m.w, 1.5);
+    let isDent = step(1.5, m.w) * step(m.w, 2.5);
+    let bowl = 1.0 - smoothstep(0.0, 1.0, d);
+    hole = max(hole, isHole * (1.0 - smoothstep(0.75, 1.0, d)));
+    // a hole is a pit with a pushed-up lip; a dent is a shallow bowl, a scuff a shallower one
+    h += m.z * (isHole * (0.25 * (1.0 - smoothstep(1.0, 1.7, d)) - 1.1 * (1.0 - smoothstep(0.6, 1.15, d))) - mix(0.16, 0.34, isDent) * (1.0 - isHole) * bowl * bowl);
+    scuff = max(scuff, (1.0 - isHole) * (1.0 - smoothstep(0.55, 1.05, d)) + isHole * 0.5 * (1.0 - smoothstep(1.0, 1.8, d)));
+  }
+  return vec3f(h, hole, scuff);
+}
+
+// the normal of a surface at P, facing N, that has been raised by h (a height known only here in
+// the shader, in world units) — from how h and P change across the screen
+fn bumped(N: vec3f, P: vec3f, h: f32) -> vec3f {
+  let px = dpdx(P); let py = dpdy(P);
+  let r1 = cross(py, N); let r2 = cross(N, px);
+  let det = dot(px, r1);
+  let g = (dpdx(h) * r1 + dpdy(h) * r2) * sign(det);
+  return normalize(abs(det) * N - g);
+}
 
 // packed beads: distance to the nearest and second-nearest bead centre around p, and the nearest one's id
 fn beads(p: vec3f) -> vec3f {
@@ -314,8 +389,9 @@ fn beads(p: vec3f) -> vec3f {
   return vec3f(f1, f2, id);
 }
 
-// the opaque materials: rubber, styrofoam, metal. c is the colour of the drawing at this point, Q the rest position.
-fn solidBody(kind: f32, c: vec3f, Q: vec3f, N: vec3f, V: vec3f) -> vec3f {
+// the opaque materials: rubber, styrofoam, metal. c is the colour of the drawing at this point, Q the
+// rest position; heat and burn are what a flame has done here, mk what blows and bullets have (see marks).
+fn solidBody(kind: f32, c: vec3f, Q: vec3f, P: vec3f, N: vec3f, V: vec3f, heat: f32, burn: f32, mk: vec3f) -> vec3f {
   let L = u.keyDir.xyz;
   let key = u.keyDir.w;
   let NdV = max(dot(N, V), 1e-3);
@@ -326,51 +402,95 @@ fn solidBody(kind: f32, c: vec3f, Q: vec3f, N: vec3f, V: vec3f) -> vec3f {
   var rough = 0.45;
   var wrap = 0.15;      // how far the key light creeps round the terminator
   var metal = 0.0;
+  var glow = vec3f(0.0);
   if (kind < K_RUBBER + 0.5) {
     // rubber: the drawing in a dense satin skin
     albedo = c * 0.82;
     rough = 0.42; wrap = 0.2;
+    // burnt, it is a dry black crust — and while it is still hot, the fire shows red in its cracks
+    let soot = smoothstep(0.04, 0.5, burn * (0.75 + 0.5 * fbm(Q * 26.0)));
+    albedo = mix(albedo, vec3f(0.012, 0.011, 0.01), soot);
+    rough = mix(rough, 0.88, soot);
+    let crack = smoothstep(0.5, 0.72, fbm(Q * 58.0 + 3.1));
+    glow = vec3f(2.4, 0.5, 0.05) * smoothstep(0.45, 1.0, heat) * (0.2 + 1.1 * crack) * soot;
+    // a bullet that bounced off leaves a grey smear of lead
+    albedo = mix(albedo, vec3f(0.2, 0.2, 0.21), mk.z * 0.7 * (1.0 - soot));
+    rough = mix(rough, 0.6, mk.z);
   } else if (kind < K_FOAM + 0.5) {
     // styrofoam: pale pressed beads, dark in the seams between them, with almost no shine
     let b = beads(Q * 34.0);
     let seam = smoothstep(0.02, 0.3, b.y - b.x);
     albedo = mix(c, vec3f(0.94), 0.42) * mix(0.62, 1.0, seam) * (0.93 + 0.07 * b.z);
     F0 = vec3f(0.02); rough = 0.9; wrap = 0.5;
+    // in a flame the beads run together into a glossy skin, yellowed, then brown, then black
+    let melted = smoothstep(0.0, 0.3, burn);
+    albedo = mix(albedo, mix(c, vec3f(0.6, 0.42, 0.16), 0.75) * 0.8, melted);
+    albedo = mix(albedo, vec3f(0.035, 0.026, 0.02), smoothstep(0.35, 0.95, burn));
+    rough = mix(rough, 0.26, melted); F0 = mix(F0, vec3f(0.05), melted); wrap = mix(wrap, 0.15, melted);
+    // crushed beads are packed and dark; the bottom of a hole is in shadow
+    albedo *= (1.0 - 0.35 * mk.z) * (1.0 - 0.85 * mk.y);
   } else {
     // metal: brushed along the fox; the drawing is the colour of its reflections
     let brush = vnoise(vec3f(Q.x * 4.0, Q.y * 90.0, Q.z * 220.0));
     F0 = mix(vec3f(0.78, 0.79, 0.81), c * c, 0.72);   // squared: reflections wash a tint out, so start deeper
     rough = 0.2 + 0.08 * brush;
     metal = 1.0;
+    // heat leaves an oxide film on it for good — straw, then purple, then blue, then grey…
+    var film = mix(vec3f(0.8, 0.6, 0.27), vec3f(0.45, 0.2, 0.4), smoothstep(0.2, 0.42, burn));
+    film = mix(film, vec3f(0.13, 0.25, 0.62), smoothstep(0.42, 0.66, burn));
+    film = mix(film, vec3f(0.3, 0.36, 0.42), smoothstep(0.74, 1.0, burn));
+    F0 = mix(F0, film, smoothstep(0.02, 0.22, burn) * 0.85);
+    rough = mix(rough, 0.34, smoothstep(0.6, 1.0, burn));
+    // …and while it is hot, it glows: dull red, then orange, then yellow
+    glow = vec3f(1.7, 0.2, 0.02) * smoothstep(0.18, 0.55, heat) + vec3f(2.2, 1.15, 0.2) * smoothstep(0.5, 0.95, heat);
+    // where it was struck, the brushed finish is scraped bright; a bullet's pit is dark at the bottom
+    F0 = mix(F0, vec3f(0.86, 0.87, 0.88), mk.z * 0.55) * (1.0 - 0.7 * mk.y);
+    rough = mix(rough, 0.34, mk.z);
   }
   let amb = u.bg.rgb * mix(0.3, 0.75, N.y * 0.5 + 0.5);
-  let lit = amb + vec3f(1.0, 0.97, 0.92) * key * 0.45 * clamp((NdL + wrap) / (1.0 + wrap), 0.0, 1.0);
+  let lit = amb + vec3f(1.0, 0.97, 0.92) * key * 0.45 * clamp((NdL + wrap) / (1.0 + wrap), 0.0, 1.0) + lampAt(P, N);
   // a rough surface never turns into a mirror, even at a grazing angle
   let F = F0 + (max(vec3f(1.0 - rough), F0) - F0) * pow(1.0 - NdV, 5.0);
   let env = min(studioEnv(R, rough, u.bg.rgb), vec3f(2.6));
   let spec = ggx(N, V, L, rough) * key * vec3f(1.0, 0.97, 0.93);
-  let col = albedo * lit * (1.0 - metal) * (vec3f(1.0) - F) + (env + spec) * F;
-  return min(col, vec3f(6.0));
+  let col = albedo * lit * (1.0 - metal) * (vec3f(1.0) - F) + (env + spec + lampAt(P, R) * 0.7) * F;
+  return min(col, vec3f(6.0)) + glow;
 }
 
 @fragment fn fsJelly(i: VOut, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
   // ── the drawing, running straight down through the body: rest-plane (u, w) → texture ──
   // i.rest is (u, height, w); on the walls u and w are already pulled in past the drawn contour
   let Q = i.rest;
-  let c = textureSample(artTex, artSmp, (Q.xz - u.art.xy) * u.art.zw).rgb;
+  let art = textureSample(artTex, artSmp, (Q.xz - u.art.xy) * u.art.zw).rgb;
   // drawn lines and the dark of the eyes are dense gel that lets almost nothing through
-  let line = 1.0 - smoothstep(0.015, 0.11, dot(c, vec3f(0.2126, 0.7152, 0.0722)));
+  let line = 1.0 - smoothstep(0.015, 0.11, dot(art, vec3f(0.2126, 0.7152, 0.0722)));
+
+  let kind = u.misc.w;
+  // (both come from the coarse mesh of the simulation: a little grain keeps its facets from showing as contours)
+  let fray = (fbm(Q * 11.0 + 5.3) - 0.5) * 0.36;
+  let heat = clamp(i.fx.x + fray * smoothstep(0.0, 0.2, i.fx.x), 0.0, 1.0);
+  let burn = clamp(i.fx.y + fray * smoothstep(0.0, 0.2, i.fx.y), 0.0, 1.0);
+  let mk = marks(Q.xz);
 
   var N = normalize(i.n);
   if (!ff) { N = -N; }
   let P = i.wp;
+  // dents and holes tilt the surface; so do the blisters of whatever a flame has cooked — the
+  // slow bubbles of jelly, the crust of rubber, the lumps styrofoam melts into (metal has none)
+  let blister = (0.55 * heat + 0.45 * burn) * fbm(Q * 26.0 + vec3f(0.0, u.camPos.w * 1.6 * heat, 0.0));
+  var rise = 0.006;
+  if (kind > K_METAL - 0.5) { rise = 0.0; } else if (kind > K_FOAM - 0.5) { rise = 0.016; } else if (kind > 0.5) { rise = 0.01; }
+  N = bumped(N, P, mk.x + blister * rise);
   let V = normalize(u.camPos.xyz - P);
   let L = u.keyDir.xyz;
   let key = u.keyDir.w;
   let NdV = max(dot(N, V), 1e-3);
 
-  let kind = u.misc.w;
-  if (kind > 0.5) { return vec4f(solidBody(kind, c, Q, N, V), 1.0); }
+  if (kind > 0.5) { return vec4f(solidBody(kind, art, Q, P, N, V, heat, burn, mk), 1.0); }
+
+  // jelly is sugar: where the flame has been it runs to amber, then to a dark caramel
+  var c = mix(art, art * vec3f(0.98, 0.56, 0.2) + vec3f(0.07, 0.025, 0.0), smoothstep(0.0, 0.7, burn) * 0.85);
+  c = mix(c, vec3f(0.2, 0.075, 0.02), smoothstep(0.55, 1.0, burn) * 0.75);
 
   // ── thickness along the view ray ──
   let uv = i.pos.xy * u.screen.zw;
@@ -389,8 +509,9 @@ fn solidBody(kind: f32, c: vec3f, Q: vec3f, N: vec3f, V: vec3f) -> vec3f {
 
   // ── absorption / scattering: the colour of the drawing is the colour of the jelly ──
   let sigma = -log(clamp(c, vec3f(0.003), vec3f(0.985))) * u.jelly.x * dens + vec3f(line * 24.0);
-  let scatK = mix(u.jelly.y, 26.0, line);
-  let rough = 0.1 + 0.05 * line;
+  // melted, it is clearer and wetter; a bullet's track through it is a milky thread
+  let scatK = mix(mix(u.jelly.y * (1.0 - 0.45 * heat), 26.0, line), 60.0, mk.y);
+  let rough = max(0.1 + 0.05 * line - 0.06 * burn, 0.035);
 
   // ── refraction: bend the view ray into the jelly, find where it leaves ──
   let ior = 1.42;
@@ -418,7 +539,8 @@ fn solidBody(kind: f32, c: vec3f, Q: vec3f, N: vec3f, V: vec3f) -> vec3f {
   let NdL = dot(N, L);
   let wrap = clamp((NdL + 0.6) / 1.6, 0.0, 1.0);
   let amb = u.bg.rgb * mix(0.3, 0.75, N.y * 0.5 + 0.5);
-  let inner = c * u.jelly.z * (amb + vec3f(1.0, 0.97, 0.92) * key * 0.45 * wrap);
+  let lamp = lampAt(P, N);
+  let inner = mix(c, vec3f(0.9), mk.y * 0.8) * u.jelly.z * (amb + vec3f(1.0, 0.97, 0.92) * key * 0.45 * wrap + lamp);
 
   // thin edges glow when the key light is behind them
   let back = pow(clamp(dot(V, -L), 0.0, 1.0), 3.0) * 1.4 + 0.25;
@@ -439,7 +561,7 @@ fn solidBody(kind: f32, c: vec3f, Q: vec3f, N: vec3f, V: vec3f) -> vec3f {
   let F = F0 + (1.0 - F0) * pow(1.0 - NdV, 5.0);
   let env = studioEnv(R, rough, u.bg.rgb);
   let spec = ggx(N, V, L, rough) * key * vec3f(1.0, 0.97, 0.93);
-  let col = body * (1.0 - F) + env * F + spec * 0.9;
+  let col = body * (1.0 - F) + (env + lampAt(P, R)) * F + spec * 0.9;
 
   return vec4f(col, 1.0);
 }
@@ -452,6 +574,37 @@ struct LOut { @builtin(position) pos: vec4f, @location(0) d: f32 };
 @fragment fn fsLine(i: LOut) -> @location(0) vec4f {
   let a = u.misc.y * mix(0.9, 0.35, clamp((i.d - 5.0) * 0.5, 0.0, 1.0));
   return vec4f(vec3f(0.04, 0.05, 0.06) * a, a);
+}
+`;
+
+// ── particles: one camera-facing quad each — a soft blob, a crisp disc or something between, or a
+//    streak along its travel ──
+const WGSL_FX = WGSL_COMMON + /* wgsl */`
+@group(0) @binding(0) var<uniform> u: U;
+struct PIn { @location(0) pos: vec4f, @location(1) col: vec4f, @location(2) axis: vec4f };
+struct POut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) col: vec4f, @location(2) hard: f32 };
+@vertex fn vs(@builtin(vertex_index) vi: u32, p: PIn) -> POut {
+  let uv = vec2f(f32(vi & 1u), f32((vi >> 1u) & 1u)) * 2.0 - 1.0;
+  let toCam = normalize(u.camPos.xyz - p.pos.xyz);
+  let r = p.pos.w;
+  var side = normalize(cross(vec3f(0.0, 1.0, 0.0), toCam)) * r;
+  var up = normalize(cross(toCam, side)) * r;
+  let l = length(p.axis.xyz);
+  if (l > 1e-5) {
+    // a streak: as long as its travel (plus its own roundness), as wide as itself
+    up = p.axis.xyz * (1.0 + r / l);
+    side = normalize(cross(p.axis.xyz, toCam)) * r;
+  }
+  var o: POut;
+  o.pos = u.viewProj * vec4f(p.pos.xyz + side * uv.x + up * uv.y, 1.0);
+  o.uv = uv; o.col = p.col; o.hard = p.axis.w;
+  return o;
+}
+@fragment fn fs(i: POut) -> @location(0) vec4f {
+  let r = length(i.uv);
+  let soft = pow(clamp(1.0 - r, 0.0, 1.0), 1.4);
+  let a = mix(soft, 1.0 - smoothstep(0.82, 1.0, r), i.hard);
+  return i.col * a;
 }
 `;
 

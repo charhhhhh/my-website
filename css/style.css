@@ -68,7 +68,7 @@ canvas[data-cursor="orbit"] {
   cursor: move;
 }
 
-canvas[data-cursor="knife"] {
+canvas[data-cursor="aim"] {
   cursor: crosshair;
 }
 
@@ -121,9 +121,52 @@ canvas[data-cursor="knife"] {
   transform: translate(-50%, 0);
 }
 
+/* BONK: stamped where the bat lands (main.js places it and picks the tilt) */
+.bonk {
+  --tilt: -8deg;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font: italic 900 clamp(44px, 6.4vw, 92px)/1 var(--sans);
+  letter-spacing: -.02em;
+  color: var(--ink);
+  -webkit-text-stroke: .07em var(--bg);
+  paint-order: stroke fill;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transform: translate(-50%, -70%) rotate(var(--tilt));
+}
+
+.bonk.on {
+  animation: bonk .7s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+
+@keyframes bonk {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -70%) rotate(var(--tilt)) scale(.3);
+  }
+
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -70%) rotate(var(--tilt)) scale(1);
+  }
+
+  65% {
+    opacity: 1;
+    transform: translate(-50%, -78%) rotate(var(--tilt)) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -92%) rotate(var(--tilt)) scale(1.06);
+  }
+}
+
 .tools {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-top: 11px;
 }
@@ -132,13 +175,14 @@ canvas[data-cursor="knife"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--line-strong);
   background: transparent;
-  padding: 8px 10px;
+  padding: 8px 4px;
   min-height: 36px;
   cursor: pointer;
   font-size: 12.5px;
+  white-space: nowrap;
 }
 
 .tool svg {
@@ -429,7 +473,8 @@ input:disabled,
 
 .checks {
   display: flex;
-  gap: 22px;
+  flex-wrap: wrap;
+  gap: 10px 18px;
   margin-top: 14px;
 }
 
@@ -673,13 +718,28 @@ body.no-gpu .readouts .stats {
   }
 }
 
-@media (max-height: 760px) and (min-width: 861px) {
+@media (max-height: 860px) and (min-width: 861px) {
   .panel {
     padding: 14px 16px 12px;
   }
 
   .group {
     padding: 11px 0;
+  }
+
+  .tools,
+  .mats {
+    margin-top: 8px;
+  }
+
+  .tool {
+    min-height: 30px;
+    padding: 5px 4px;
+  }
+
+  .mat {
+    min-height: 28px;
+    padding: 5px 4px;
   }
 
   .swatch .chip {
@@ -707,6 +767,10 @@ body.no-gpu .readouts .stats {
 @media (prefers-reduced-motion: reduce) {
   canvas {
     transition: none;
+  }
+
+  .bonk.on {
+    animation-timing-function: linear;
   }
 
   .flash {
