@@ -3056,7 +3056,7 @@ fn oetf(c: vec3f) -> vec3f {
     function adapterHelp() {
       const ua = navigator.userAgent;
       const linux = /Linux/.test(ua) && !/Android/.test(ua);
-      const intro = '這個瀏覽器有 WebGPU，但拿不到顯示卡。請依序試試（網址請貼到網址列）：\n\n';
+      const intro = '這個瀏覽器有 WebGPU，但拿不到顯示卡。按照以下步驟解決，網址請貼到網址列：\n\n';
       if (/Firefox\//.test(ua)) return intro + [
         '1. 開啟 about:preferences，在「一般 → 效能」取消「使用推薦的效能設定」，勾選「可用時使用硬體加速」。',
         '2. 開啟 about:config，把 dom.webgpu.enabled 設為 true，然後重新啟動 Firefox。',
