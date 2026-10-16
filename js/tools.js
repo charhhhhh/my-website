@@ -9,10 +9,10 @@
 'use strict';
 
 const HAMMER = {
-  L: 1.36,        // from the end of the handle (where it turns in the hand) to the axis of the head
-  face: 0.27,     // the striking face lies this far below the handle
-  R: 0.15,        // radius of the face
-  head: 0.5,      // height of the head
+  L: 1.9,         // from the end of the handle (where it turns in the hand) to the axis of the head
+  face: 0.48,     // the striking face lies this far below the handle
+  R: 0.34,        // radius of the face — a sledge, wide enough to press like a hydraulic ram
+  head: 0.9,      // height of the head
 };
 const BAT = {
   L: 2.5,
@@ -127,12 +127,12 @@ function propBuilder() {
 function buildHammerMesh() {
   const b = propBuilder(), { L, face, R, head } = HAMMER;
   // handle: ash, a slim oval that swells where it is held
-  b.lathe([0, 0, 0], [1, 0, 0], [[0, 0.034], [0.02, 0.052], [0.12, 0.06], [0.4, 0.052], [0.78, 0.041], [L - 0.2, 0.044], [L + 0.05, 0.046]], 7.0, 18, 0.76);
+  b.lathe([0, 0, 0], [1, 0, 0], [[0, 0.06], [0.03, 0.09], [0.16, 0.1], [0.55, 0.088], [1.1, 0.072], [L - 0.25, 0.076], [L + 0.08, 0.08]], 7.0, 18, 0.76);
   // head: a forged drum, waisted at the eye, with a polished face at either end
   b.lathe([L, -face, 0], [0, 1, 0], [
-    [0, R - 0.028, 6.0], [0.03, R], [0.03, R],
-    [0.03, R, 6.2], [0.15, R], [0.2, R * 0.84], [head - 0.2, R * 0.84], [head - 0.15, R], [head - 0.03, R], [head - 0.03, R],
-    [head - 0.03, R, 6.0], [head, R - 0.028],
+    [0, R - 0.05, 6.0], [0.05, R], [0.05, R],
+    [0.05, R, 6.2], [0.25, R], [0.33, R * 0.84], [head - 0.33, R * 0.84], [head - 0.25, R], [head - 0.05, R], [head - 0.05, R],
+    [head - 0.05, R, 6.0], [head, R - 0.05],
   ], 6.2, 26);
   return b.finish();
 }

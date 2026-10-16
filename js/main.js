@@ -761,6 +761,9 @@ async function main() {
   // one takes the blow as it is.
   const hammer = { t: -1, hit: false, th: 0, th0: 0, p: null, soft: false, depth: 0, bounce: 0 };
   const HAMMER_REST = 0.62, HAMMER_BACK = 1.25;   // how far the head is raised while it waits, and at the top of the swing (rad)
+  const HAMMER_HOLD = 0.1;   // how long it stays pressed down at the bottom, like a hydraulic press (s)
+  const HAMMER_BLOW = 20;   // how hard it strikes a rigid piece (times the material's `blow`)
+  const HAMMER_DENT = 2.6;   // how deep it dents a rigid piece, as a share of its thickness (times the material's `dent`)
   // the hammer turned up by th about the hand, which is placed so that at th = 0 the face lies flat
   // on p (or `sink` below it): the hand, the frame, and where the face is
   function hammerPose(p, th, sink) {
@@ -770,20 +773,24 @@ async function main() {
     const X = [-hd[0] * ct, st, -hd[2] * ct], Y = [hd[0] * st, ct, hd[2] * st];
     return { G, X, Y, Z: cross3(X, Y), f: [G[0] + X[0] * L - Y[0] * face, G[1] + X[1] * L - Y[1] * face, G[2] + X[2] * L - Y[2] * face] };
   }
-  // how deep the face is in a soft body, t seconds after it landed: in, a moment's rest, out again
+  // seconds since it landed, with the time it is held down at the bottom taken out
+  const hammerClock = t => t < 0.07 ? t : Math.max(0.07, t - HAMMER_HOLD);
+  // how deep the face is in a soft body, t (hammerClock) seconds after it landed: in, a moment's rest, out again
   const hammerSink = t => hammer.depth * (t < 0.07 ? 1 - (1 - t / 0.07) ** 2 : t < 0.13 ? 1 : 1 - ease((t - 0.13) / 0.16));
   function landHammer(f, c) {
     const m = material, h = hammer;
     h.soft = c >= 0 && !sim.rigid;
-    h.depth = h.soft ? m.squash * SHAPE.T : 0;
+    h.depth = h.soft ? Math.min(0.92, m.squash * 2.4) * SHAPE.T : 0;   // crushed nearly flat
     h.bounce = c < 0 ? 0.12 : m.rebound * 0.45;
-    if (c < 0) { SFX.thud(1); debris.dust(f, up3, 6, 1.6); return; }   // the table
+    if (c < 0) { SFX.thud(1.6); debris.dust(f, up3, 16, 2.4); return; }   // the table
     if (!h.soft) {
       // a rigid piece takes it whole: down — and so, off-centre, up at its far end — and keeps the dent
-      sim.punch(c, f, [0, -1, 0], 3.2 * m.blow);
-      addMark(restOf(f, c), m.dent, MARK.dent);
+      sim.punch(c, f, [0, -1, 0], HAMMER_BLOW * m.blow);
+      const q = restOf(f, c);
+      if (m.dent) sim.dent(c, q, HAMMER.R * 1.35, Math.min(0.6, m.dent * HAMMER_DENT) * SHAPE.T);
+      addMark(q, m.dent * 2.2, MARK.dent);
     }
-    struck(f, [0, -1, 0], 16, 3.2, 1, 1);
+    struck(f, [0, -1, 0], 40, 4.5, 1.6, 0.7);
   }
   function updateHammer(adt) {
     const h = hammer;
@@ -812,13 +819,13 @@ async function main() {
       if (h.hit) {
         // it rests where it landed — sunk in, if the body gave — then is thrown back as hard as
         // the material does that, and returns to the pointer
-        const t = h.t, u = Math.min(1, t / 0.55);
+        const t = hammerClock(h.t), u = Math.min(1, t / 0.55);
         sink = hammerSink(t);
         th = h.th0 + (HAMMER_REST - h.th0) * ease((t - 0.1) / 0.45) + h.bounce * Math.sin(Math.PI * Math.pow(u, 0.6)) * (1 - u);
         p = lerp3(h.p, aim.p, ease((t - 0.2) / 0.35));
         if (h.soft && t < 0.3) {
           const f = hammerPose(p, th, sink).f;
-          pushers.push({ c: f, r: HAMMER.R, h: HAMMER.head, vy: -(hammerSink(t + sim.stepDt) - sink) / sim.stepDt, touched: 0 });
+          pushers.push({ c: f, r: HAMMER.R, h: HAMMER.head, vy: -(hammerSink(hammerClock(h.t + sim.stepDt)) - sink) / sim.stepDt, touched: 0 });
         }
         if (t >= 0.58) h.t = -1;
       }

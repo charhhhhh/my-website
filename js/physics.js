@@ -22,6 +22,7 @@ class SoftBody {
     this.nT = tets.length / 4;
     this.tets = tets;
     this.rest = Float32Array.from(rest);
+    this.rest0 = Float32Array.from(rest);     // the rest shape before any dents (see dent)
     this.x = new Float32Array(rest.length);
     this.prev = new Float32Array(rest.length);
     this.v = new Float32Array(rest.length);
@@ -163,6 +164,7 @@ class SoftBody {
     this.material = m;
     this.rigid = !!m.rigid;
     if (harden) this.rigidify();
+    if (!this.rigid) this.undent();
     this.shapeHold = m.hold; this.shapeSlack = m.slack;
     this.friction = m.friction; this.bounce = m.bounce; this.airDrag = m.air;
     this.remelt();
@@ -179,6 +181,7 @@ class SoftBody {
   }
 
   reset(drop = 0.35) {
+    this.undent();
     for (let i = 0; i < this.n; i++) {
       this.x[3 * i] = this.rest[3 * i];
       this.x[3 * i + 1] = this.rest[3 * i + 1] + drop;
@@ -1008,6 +1011,37 @@ class SoftBody {
       if (f <= 0) continue;
       v[k] += dir[0] * f; v[k + 1] += dir[1] * f; v[k + 2] += dir[2] * f;
     }
+  }
+
+  // A dent in rigid piece c: its rest shape is pressed in under a disc of radius r centred on
+  // (q[0], q[1]) of the rest plane, by up to `depth` at the top, less further down (the underside
+  // stays where it is) and less towards the rim. Blows add up, but never press it right through.
+  dent(c, q, r, depth) {
+    const { rest, rest0, mass, compStart: S, compRest } = this;
+    let top = 0;
+    for (let i = S[c]; i < S[c + 1]; i++) top = Math.max(top, rest0[3 * i + 1]);
+    if (top <= 0) return;
+    let M = 0, cy = 0;
+    for (let i = S[c]; i < S[c + 1]; i++) {
+      const k = 3 * i, d = Math.hypot(rest[k] - q[0], rest[k + 2] - q[1]) / r;
+      if (d < 1) {
+        const b = 1 - d * d * (3 - 2 * d), y0 = rest0[k + 1];
+        rest[k + 1] = Math.max(rest[k + 1] - depth * b * (y0 / top), y0 * 0.12);
+      }
+      M += mass[i]; cy += mass[i] * rest[k + 1];
+    }
+    compRest[3 * c + 1] = cy / M;
+    this.dented = true;
+  }
+  undent() {
+    if (!this.dented) return;
+    this.rest.set(this.rest0);
+    for (let c = 0; c < this.nComp; c++) {
+      let M = 0, cy = 0;
+      for (let i = 0; i < this.n; i++) if (this.comp[i] === c) { M += this.mass[i]; cy += this.mass[i] * this.rest[3 * i + 1]; }
+      this.compRest[3 * c + 1] = cy / M;
+    }
+    this.dented = false;
   }
 
   // The same for a rigid piece, which takes it whole: an impulse at p that gives a piece struck
