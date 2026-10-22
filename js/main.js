@@ -95,7 +95,7 @@ async function main() {
   } catch (err) {
     console.warn(err);
     const msg = String(err && err.message || err);
-    if (msg === 'no-webgpu') showFallback('這個標本需要 WebGPU。', adapterHelp());
+    if (msg === 'no-webgpu') showFallback('需要 WebGPU。', adapterHelp());
     else if (msg === 'no-adapter') showFallback('找不到 WebGPU ', adapterHelp());
     else showFallback('渲染器無法啟動。', msg.slice(0, 400));
     return;
