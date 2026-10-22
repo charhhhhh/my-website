@@ -28,28 +28,12 @@ const SCALE_CM = 3.5;      // illustrative: 1 simulation unit ≈ 3.5 cm
 
 const $ = s => document.querySelector(s);
 
-// steps the visitor can actually follow in the browser they are using; internal URLs can't be linked, so they are spelled out to paste
+// the same Chrome/Edge flags step for every visitor; internal URLs can't be linked, so they are spelled out to paste
 function adapterHelp() {
   const ua = navigator.userAgent;
   const linux = /Linux/.test(ua) && !/Android/.test(ua);
-  const intro = '這個瀏覽器有 WebGPU，但拿不到顯示卡。按照以下步驟解決，網址請貼到網址列：\n\n';
-  if (/Firefox\//.test(ua)) return intro + [
-    '1. 開啟 about:preferences，在「一般 → 效能」取消「使用推薦的效能設定」，勾選「可用時使用硬體加速」。',
-    '2. 開啟 about:config，把 dom.webgpu.enabled 設為 true，然後重新啟動 Firefox。',
-    '3. 開啟 about:support，在「圖形」區段確認 WebGPU 有列出顯示卡。',
-    linux ? '4. Linux 版 Firefox 的 WebGPU 仍不穩定，還是不行的話請改用 Chrome。' : '4. 還是不行的話，請更新顯示卡驅動程式。',
-  ].join('\n');
-  if (/Safari\//.test(ua) && !/Chrom(e|ium)\//.test(ua)) return intro + [
-    '1. 把系統更新到 macOS 26 / iOS 26 以上，Safari 26 起預設開啟 WebGPU。',
-    '2. 舊版 Mac：Safari → 設定 → 進階，勾選「顯示網頁開發者功能」，再到「功能旗標」勾選 WebGPU。',
-    '3. 舊版 iPhone / iPad：設定 → App → Safari → 進階 → 功能旗標，打開 WebGPU。',
-    '4. 重新開啟 Safari 後再載入這一頁。',
-  ].join('\n');
   const scheme = /Edg\//.test(ua) ? 'edge' : 'chrome';
-  return intro + [
-    // `1. 開啟 ${scheme}://settings/system，打開圖硬體加速。（Use graphics acceleration when available）`,
-    `打開 ${scheme}://flags/ \n 搜尋 enable-unsafe-webgpu 設為 Enabled` + (linux ? `\n enable-vulkan 也設為 Enabled` : ''),
-  ].join('\n');
+  return `打開 ${scheme}://flags/ \n 搜尋 enable-unsafe-webgpu 設為 Enabled` + (linux ? `\n enable-vulkan 也設為 Enabled` : '');
 }
 function showFallback(title, detail) {
   const f = $('#fallback');
@@ -111,7 +95,7 @@ async function main() {
   } catch (err) {
     console.warn(err);
     const msg = String(err && err.message || err);
-    if (msg === 'no-webgpu') showFallback('這個標本需要 WebGPU。', '你的瀏覽器沒有提供 navigator.gpu，所以沒有東西可以拿來渲染。請改用最新版的 Chrome、Edge 或 Safari（或 Windows 上的 Firefox），並開啟硬體加速。');
+    if (msg === 'no-webgpu') showFallback('這個標本需要 WebGPU。', adapterHelp());
     else if (msg === 'no-adapter') showFallback('找不到 WebGPU ', adapterHelp());
     else showFallback('渲染器無法啟動。', msg.slice(0, 400));
     return;
