@@ -28,13 +28,6 @@ const SCALE_CM = 3.5;      // illustrative: 1 simulation unit ≈ 3.5 cm
 
 const $ = s => document.querySelector(s);
 
-// the same Chrome/Edge flags step for every visitor; internal URLs can't be linked, so they are spelled out to paste
-function adapterHelp() {
-  const ua = navigator.userAgent;
-  const linux = /Linux/.test(ua) && !/Android/.test(ua);
-  const scheme = /Edg\//.test(ua) ? 'edge' : 'chrome';
-  return `打開 ${scheme}://flags/ \n 搜尋 enable-unsafe-webgpu 設為 Enabled` + (linux ? `\n enable-vulkan 也設為 Enabled` : '');
-}
 function showFallback(title, detail) {
   const f = $('#fallback');
   f.hidden = false;
@@ -46,7 +39,7 @@ function showFallback(title, detail) {
 
 async function main() {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const canvas = $('#gl');
+  let canvas = $('#gl');
 
   // ── build everything once ──
   // the world is a list of pieces; at the start there is one — the whole fox, in its first look
@@ -88,17 +81,28 @@ async function main() {
 
   const arts = await Promise.all(LOOKS.map(async l => { const img = new Image(); img.src = l.texture; await img.decode(); return img; }));
 
-  let renderer;
+  // WebGPU where the browser has it, the same scene in WebGL2 where it does not (or will not start);
+  // ?webgl forces the fallback, to check it on a machine that has WebGPU
+  let renderer, Backend = Renderer;
   try {
     if (!navigator.gpu) throw new Error('no-webgpu');
+    if (new URLSearchParams(location.search).has('webgl')) throw new Error('webgl requested');
     renderer = await Renderer.create(canvas, renderMesh, sim.edges, sim.n, arts);
   } catch (err) {
     console.warn(err);
-    const msg = String(err && err.message || err);
-    if (msg === 'no-webgpu') showFallback('需要 WebGPU。', adapterHelp());
-    else if (msg === 'no-adapter') showFallback('找不到 WebGPU ', adapterHelp());
-    else showFallback('渲染器無法啟動。', msg.slice(0, 400));
-    return;
+    // a canvas keeps the first kind of context it gave out, so the fallback draws on a fresh one
+    const fresh = canvas.cloneNode(false);
+    canvas.replaceWith(fresh); canvas = fresh;
+    Backend = GLRenderer;
+    try {
+      renderer = await GLRenderer.create(canvas, renderMesh, sim.edges, sim.n, arts);
+    } catch (e) {
+      console.warn(e);
+      const msg = String(e && e.message || e);
+      if (msg === 'no-webgl2' || msg === 'no-float-target') showFallback('需要 WebGPU 或 WebGL2。', '請更新瀏覽器，或在瀏覽器設定裡開啟「硬體加速」後重新載入。');
+      else showFallback('渲染器無法啟動。', msg.slice(0, 400));
+      return;
+    }
   }
   // a lost device (driver reset, GPU switch) gets two attempts at a clean rebuild before giving up
   let recoveries = 0;
@@ -108,7 +112,7 @@ async function main() {
       if (info.reason === 'destroyed') return;
       if (recoveries++ < 2) {
         try {
-          const fresh = await Renderer.create(canvas, renderMesh, sim.edges, sim.n, arts);
+          const fresh = await Backend.create(canvas, renderMesh, sim.edges, sim.n, arts);
           fresh.useArt(look); fresh.dyn = dyn; mountProps(fresh); renderer = fresh; wire(fresh); resize();
           requestAnimationFrame(frame);
           return;

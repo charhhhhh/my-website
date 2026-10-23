@@ -63,6 +63,26 @@ const MSAA = 4;
 const UBO_SIZE = 880;
 const MAX_MARKS = 24;      // keep in step with the marks array in shaders.js
 
+// the uniform block, laid out as struct U in shaders.js (and the std140 block in shaders-gl.js)
+function packUniforms(u, cam, light, params, w, h) {
+  u.set(cam.viewProj, 0); u.set(cam.view, 16); u.set(cam.invViewProj, 32);
+  u.set(light.lightVP, 48); u.set(light.topVP, 64);
+  u.set([...cam.pos, params.time], 80);
+  u.set([...cam.fwd, 0], 84);
+  u.set([...light.dir, light.intensity], 88);
+  u.set([w, h, 1 / w, 1 / h], 92);
+  u.set(params.art, 96);
+  u.set([...params.gel, 0], 100);
+  u.set([params.exposure, params.meshAlpha, 0, params.kind], 104);
+  u.set([...params.bg, 1], 108);
+  u.set([...params.shadowTint, 1], 112);
+  // one moving light (the flame, a muzzle flash): where, how fast it falls off, its colour —
+  // and what the tools have left on the body
+  u.set([...params.lamp.p, params.lamp.fall], 116);
+  u.set([...params.lamp.col, params.markN], 120);
+  u.set(params.marks, 124);
+}
+
 class Renderer {
   static async create(canvas, mesh, simEdges, nParticles, arts) {
     if (!navigator.gpu) throw new Error('no-webgpu');
@@ -369,22 +389,7 @@ class Renderer {
   // fill the uniform block; cam = { viewProj, view, invViewProj, pos, fwd }
   setUniforms(cam, light, params) {
     const u = this.uboData;
-    u.set(cam.viewProj, 0); u.set(cam.view, 16); u.set(cam.invViewProj, 32);
-    u.set(light.lightVP, 48); u.set(light.topVP, 64);
-    u.set([...cam.pos, params.time], 80);
-    u.set([...cam.fwd, 0], 84);
-    u.set([...light.dir, light.intensity], 88);
-    u.set([this.w, this.h, 1 / this.w, 1 / this.h], 92);
-    u.set(params.art, 96);
-    u.set([...params.gel, 0], 100);
-    u.set([params.exposure, params.meshAlpha, 0, params.kind], 104);
-    u.set([...params.bg, 1], 108);
-    u.set([...params.shadowTint, 1], 112);
-    // one moving light (the flame, a muzzle flash): where, how fast it falls off, its colour —
-    // and what the tools have left on the body
-    u.set([...params.lamp.p, params.lamp.fall], 116);
-    u.set([...params.lamp.col, params.markN], 120);
-    u.set(params.marks, 124);
+    packUniforms(u, cam, light, params, this.w, this.h);
     this.device.queue.writeBuffer(this.ubo, 0, u);
     this.device.queue.writeBuffer(this.lightUbo, 0, light.lightVP);
     this.device.queue.writeBuffer(this.topUbo, 0, light.topVP);
