@@ -1289,4 +1289,17 @@ async function main() {
   requestAnimationFrame(frame);
 }
 
+// stacked layout: the canvas swallows touch drags, so point out that the page scrolls; once it has, the hint goes for good.
+// the body is the scroller there, and scroll does not bubble, so listen in the capture phase
+(() => {
+  const hint = $('#scrollHint');
+  const onScroll = () => {
+    if ((document.body.scrollTop || document.documentElement.scrollTop) < 40) return;
+    hint.classList.add('gone');
+    document.removeEventListener('scroll', onScroll, true);
+    setTimeout(() => hint.remove(), 400);
+  };
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+})();
+
 main().catch(err => { console.error(err); showFallback('啟動時發生錯誤。', String(err && err.message || err)); });

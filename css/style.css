@@ -625,6 +625,23 @@ body.no-gpu .readouts .stats {
   }
 }
 
+/* ── scroll hint (stacked layout only) ── */
+.scroll-hint {
+  display: none;
+}
+
+@keyframes hint-bob {
+
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+
+  50% {
+    transform: translate(-50%, 6px);
+  }
+}
+
 /* ── stacked layout for narrow screens ── */
 @media (max-width: 860px),
 (max-height: 560px) and (max-width: 1000px) {
@@ -716,6 +733,38 @@ body.no-gpu .readouts .stats {
     max-width: 86vw;
     text-align: center;
   }
+
+  .scroll-hint {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    left: 50%;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: var(--bg);
+    pointer-events: none;
+    z-index: 5;
+    transform: translate(-50%, 0);
+    animation: hint-bob 1.6s ease-in-out infinite;
+    transition: opacity .4s ease;
+  }
+
+  .scroll-hint svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .scroll-hint.gone {
+    opacity: 0;
+  }
 }
 
 @media (max-height: 860px) and (min-width: 861px) {
@@ -771,6 +820,10 @@ body.no-gpu .readouts .stats {
 
   .bonk.on {
     animation-timing-function: linear;
+  }
+
+  .scroll-hint {
+    animation: none;
   }
 
   .flash {
