@@ -10,3 +10,4 @@ for d in divs:
     t = d.get_attribute("textContent")
     if "HackSir" in t:
         print(t)
+# HackSir{YOUGOTHEFLAG}
