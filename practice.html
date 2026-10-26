@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>find_elements 練習場</title>
+<style>
+  body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 16px; }
+  section { border: 1px solid #ccc; padding: 12px; margin-bottom: 16px; border-radius: 6px; }
+  .card { display: inline-block; border: 1px solid #999; padding: 8px; margin: 4px; width: 160px; }
+  .sale { color: red; }
+  .sold-out { color: gray; text-decoration: line-through; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #aaa; padding: 4px 8px; }
+  /* 全部元素隱藏 */
+  body * { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1 id="title">find_elements 練習場</h1>
+
+<!-- 1. 導覽列：練習 TAG_NAME / LINK_TEXT -->
+<section id="nav-section">
+  <h2>導覽列</h2>
+  <nav>
+    <a href="#home" class="nav-link">首頁</a>
+    <a href="#products" class="nav-link">商品</a>
+    <a href="#about" class="nav-link">關於我們</a>
+    <a href="https://example.com" class="nav-link external">外部連結</a>
+  </nav>
+</section>
+
+<!-- 2. 商品卡片：練習 CLASS_NAME / CSS_SELECTOR / 屬性 -->
+<section id="products">
+  <h2>商品</h2>
+  <div class="card" data-category="book" data-price="350">
+    <h3 class="name">Python 入門</h3>
+    <p class="price">$350</p>
+    <button class="buy-btn">購買</button>
+  </div>
+  <div class="card sale" data-category="book" data-price="280">
+    <h3 class="name">資料結構</h3>
+    <p class="price">$280（特價）</p>
+    <button class="buy-btn">購買</button>
+  </div>
+  <div class="card" data-category="electronics" data-price="1200">
+    <h3 class="name">藍牙耳機</h3>
+    <p class="price">$1200</p>
+    <button class="buy-btn">購買</button>
+  </div>
+  <div class="card sold-out" data-category="electronics" data-price="890">
+    <h3 class="name">行動電源</h3>
+    <p class="price">$890</p>
+    <button class="buy-btn" disabled>已售完</button>
+  </div>
+</section>
+
+<!-- 3. 表單：練習 NAME / ID / type 屬性 -->
+<section id="form-section">
+  <h2>表單</h2>
+  <form id="signup">
+    <input type="text" name="username" id="username" placeholder="帳號"><br>
+    <input type="password" name="password" id="password" placeholder="密碼"><br>
+    <label><input type="checkbox" name="hobby" value="reading"> 閱讀</label>
+    <label><input type="checkbox" name="hobby" value="sports"> 運動</label>
+    <label><input type="checkbox" name="hobby" value="music"> 音樂</label><br>
+    <label><input type="radio" name="gender" value="m"> 男</label>
+    <label><input type="radio" name="gender" value="f"> 女</label><br>
+    <select name="city" id="city">
+      <option value="tpe">台北</option>
+      <option value="txg">台中</option>
+      <option value="khh">高雄</option>
+    </select>
+    <button type="submit" id="submit-btn">送出</button>
+  </form>
+</section>
+
+<!-- 4. 表格：練習 XPATH 找某列某欄 -->
+<section id="table-section">
+  <h2>成績表</h2>
+  <table id="scores">
+    <thead><tr><th>姓名</th><th>數學</th><th>英文</th></tr></thead>
+    <tbody>
+      <tr><td>小明</td><td>85</td><td>72</td></tr>
+      <tr><td>小華</td><td>92</td><td>88</td></tr>
+      <tr><td>小美</td><td>67</td><td>95</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 5. 巢狀清單：練習在元素內再 find_elements -->
+<section id="list-section">
+  <h2>巢狀清單</h2>
+  <ul id="menu">
+    <li class="item">水果
+      <ul><li class="sub">蘋果</li><li class="sub">香蕉</li></ul>
+    </li>
+    <li class="item">飲料
+      <ul><li class="sub">紅茶</li><li class="sub">咖啡</li><li class="sub">果汁</li></ul>
+    </li>
+  </ul>
+</section>
+
+<!-- 6. 動態元素：練習等待 -->
+<section id="dynamic-section">
+  <h2>動態載入</h2>
+  <button id="load-btn" onclick="loadItems()">載入留言</button>
+  <div id="comments"></div>
+</section>
+
+<!-- 7. 藏旗區：一堆假 flag，只有一個是真的 -->
+<div id="vault"></div>
+
+<script>
+// 產生 300 個雜訊元素 + 假 flag，真 flag 藏在隨機位置
+(function () {
+  const vault = document.getElementById('vault');
+  const tags = ['div', 'span', 'p', 'section', 'li'];
+  const realIndex = Math.floor(Math.random() * 300);
+  for (let i = 0; i < 300; i++) {
+    const outer = document.createElement(tags[i % tags.length]);
+    outer.className = 'box box-' + i;
+    const inner = document.createElement('span');
+    if (i === realIndex) {
+      inner.setAttribute('data-flag', 'true');
+      inner.textContent = 'FLAG{s3l3n1um_f0und_m3}';
+    } else if (i % 7 === 0) {
+      inner.setAttribute('data-flag', 'false');
+      inner.textContent = 'FLAG{fake_' + i + '}';
+    } else {
+      inner.textContent = 'noise ' + i;
+    }
+    outer.appendChild(inner);
+    vault.appendChild(outer);
+  }
+})();
+
+function loadItems() {
+  setTimeout(() => {
+    const box = document.getElementById('comments');
+    ['好用！', '推推', '還不錯'].forEach(t => {
+      const p = document.createElement('p');
+      p.className = 'comment';
+      p.textContent = t;
+      box.appendChild(p);
+    });
+  }, 2000);
+}
+</script>
+</body>
+</html>
