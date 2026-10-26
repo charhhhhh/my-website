@@ -9,7 +9,7 @@
 </head>
 <body>
 
-<div id="vault"></div>
+<h1>打開 F12 看看</h1>
 
 <script>
 (function () {
@@ -17,7 +17,6 @@
   const d = [18,59,57,49,9,51,40,33,3,21,15,29,21,14,18,31,28,22,27,29,39];
   const f = String.fromCharCode(...d.map(c => c ^ k));
 
-  const vault = document.getElementById('vault');
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const rand = n => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   const r = Math.floor(Math.random() * 500);
@@ -25,7 +24,7 @@
     const div = document.createElement('div');
     div.className = 'item';
     div.textContent = (i === r) ? f : rand(21);
-    vault.appendChild(div);
+    document.body.appendChild(div);
   }
 })();
 </script>
