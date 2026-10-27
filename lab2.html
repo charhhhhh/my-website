@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>click to unlock</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 960px;
+            margin: 20px auto;
+            padding: 0 16px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 6px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 6px 0;
+        }
+
+        #result {
+            margin-top: 16px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Click to Unlock</h1>
+    <p>find the flag</p>
+    <div id="board"></div>
+    <div id="result"></div>
+
+    <script>
+        (function () {
+            const k = 0x5A;
+            const d = [18, 59, 57, 49, 9, 51, 40, 33, 3, 21, 15, 29, 21, 14, 18, 31, 28, 22, 27, 29, 39];
+            const N = 300;
+            const answer = Math.floor(Math.random() * N) + 1;
+            const board = document.getElementById('board');
+            const result = document.getElementById('result');
+
+            // 1~N 每個編號一個按鈕，順序打亂
+            const nums = Array.from({ length: N }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+
+            nums.forEach(n => {
+                const b = document.createElement('button');
+                b.className = 'btn';
+                b.textContent = '按鈕 ' + n;
+                b.addEventListener('click', e => {
+                    if (!e.isTrusted) { result.textContent = 'wrong'; return; }
+                    if (n !== answer) { result.textContent = 'wrong'; return; }
+                    result.textContent = String.fromCharCode(...d.map(c => c ^ k));
+                });
+                board.appendChild(b);
+            });
+        })();
+    </script>
+</body>
+
+</html>
