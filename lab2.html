@@ -46,7 +46,6 @@
             const board = document.getElementById('board');
             const result = document.getElementById('result');
 
-            // 1~N 每個編號一個按鈕，順序打亂
             const nums = Array.from({ length: N }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
 
             nums.forEach(n => {
