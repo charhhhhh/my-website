@@ -1,32 +1,39 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
-<meta charset="UTF-8">
-<title>where is the flag</title>
-<style>
-  body * { display: none !important; }
-</style>
+  <meta charset="UTF-8">
+  <title>where is the flag</title>
+  <style>
+    body * {
+      display: none !important;
+    }
+
+    body h1 {
+      display: block !important;
+    }
+  </style>
 </head>
+
 <body>
+  <h1>打開 F12 看看</h1>
+  <script>
+    (function () {
+      const k = 0x5A;
+      const d = [18, 59, 57, 49, 9, 51, 40, 33, 3, 21, 15, 29, 21, 14, 18, 31, 28, 22, 27, 29, 39];
+      const f = String.fromCharCode(...d.map(c => c ^ k));
 
-<h1>打開 F12 看看</h1>
-
-<script>
-(function () {
-  const k = 0x5A;
-  const d = [18,59,57,49,9,51,40,33,3,21,15,29,21,14,18,31,28,22,27,29,39];
-  const f = String.fromCharCode(...d.map(c => c ^ k));
-
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const rand = n => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  const r = Math.floor(Math.random() * 500);
-  for (let i = 0; i < 500; i++) {
-    const div = document.createElement('div');
-    div.className = 'item';
-    div.textContent = (i === r) ? f : rand(21);
-    document.body.appendChild(div);
-  }
-})();
-</script>
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      const rand = n => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      const r = Math.floor(Math.random() * 500);
+      for (let i = 0; i < 500; i++) {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.textContent = (i === r) ? f : rand(21);
+        document.body.appendChild(div);
+      }
+    })();
+  </script>
 </body>
+
 </html>
