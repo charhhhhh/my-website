@@ -8,7 +8,7 @@ result = driver.find_element(By.ID, "result")
 
 for b in driver.find_elements(By.CLASS_NAME, "btn"):
     b.click()
-    if result.text.startswith("HackSir"): 
+    if "HackSir" in result.text: 
         print(b.text, result.text)
         break
-# HackSir{YOUGOTHEFLAG}
+# HackSir{uwuowoaha}
