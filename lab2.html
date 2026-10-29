@@ -33,7 +33,7 @@
 <body>
 
     <h1>Click to Unlock</h1>
-    <p>find the flag</p>
+    <p>按下某個特定按鈕的時候，最下面的 wrong button 會變成 flag</p>
     <div id="board"></div>
     <div id="result"></div>
 
@@ -43,8 +43,8 @@
             const d = [18, 59, 57, 49, 9, 51, 40, 33, 47, 45, 47, 53, 45, 53, 59, 45, 59, 39];
             const N = 500;
             const answer = Math.floor(Math.random() * N) + 1;
-            const board = document.getElementById('board');
             const result = document.getElementById('result');
+            const board = document.getElementById('board');
             result.textContent = "Nothing"
 
             const nums = Array.from({ length: N }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
@@ -54,8 +54,8 @@
                 b.className = 'btn';
                 b.textContent = '按鈕 ' + n;
                 b.addEventListener('click', e => {
-                    if (!e.isTrusted) { result.textContent = 'wrong'; return; }
-                    if (n !== answer) { result.textContent = 'wrong'; return; }
+                    if (!e.isTrusted) { result.textContent = 'wrong button'; return; }
+                    if (n !== answer) { result.textContent = 'wrong button'; return; }
                     result.textContent = String.fromCharCode(...d.map(c => c ^ k));
                 });
                 board.appendChild(b);

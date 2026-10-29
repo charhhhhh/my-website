@@ -1,3 +1,4 @@
 User-agent: *
 Disallow: /lab1_sol.py
 Disallow: /lab2_sol.py
+Disallow: /lab3_sol.py
