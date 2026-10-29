@@ -296,6 +296,26 @@ canvas[data-cursor="aim"] {
   margin: 0;
 }
 
+.tally {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.tally #tallyOut {
+  font: 20px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+
+.tally small {
+  font: 12px/1 var(--sans);
+  color: var(--muted);
+  letter-spacing: .02em;
+  margin-left: -6px;
+}
+
 /* ── specimen panel ── */
 .panel {
   position: fixed;
@@ -745,7 +765,9 @@ body.no-gpu .readouts .stats {
     border: 1px solid var(--line-strong);
     border-radius: 50%;
     background: var(--bg);
-    pointer-events: none;
+    padding: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
     z-index: 5;
     transform: translate(-50%, 0);
     animation: hint-bob 1.6s ease-in-out infinite;
@@ -764,6 +786,7 @@ body.no-gpu .readouts .stats {
 
   .scroll-hint.gone {
     opacity: 0;
+    pointer-events: none;
   }
 }
 

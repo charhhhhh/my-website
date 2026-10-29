@@ -1300,6 +1300,31 @@ async function main() {
     setTimeout(() => hint.remove(), 400);
   };
   document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+  hint.addEventListener('click', () => {
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const opts = { top: innerHeight * 0.8, behavior: smooth ? 'smooth' : 'auto' };
+    // whichever of body / viewport is the scroller moves; the other is a no-op
+    document.body.scrollBy(opts);
+    window.scrollBy(opts);
+  });
+})();
+
+// a shared count of every fox anyone has reset away, kept by a free counting service (abacus).
+// it lives apart from main() so the number still shows when the GPU never comes up
+(() => {
+  const API = 'https://abacus.jasoncameron.dev';
+  const KEY = 'xn--920au0q.tw/huyan-consumed';
+  const out = $('#tallyOut');
+  let shown = 0;
+  // replies can land out of order, so the number only ever goes up
+  const show = n => { if (n > shown) out.textContent = (shown = n).toLocaleString('zh-TW'); };
+  const ask = path => fetch(`${API}/${path}/${KEY}`).then(r => r.ok ? r.json() : null)
+    .then(j => j && typeof j.value === 'number' && show(j.value)).catch(() => {});
+  ask('get');
+  $('#reset').addEventListener('click', () => {
+    if (shown) show(shown + 1);   // count it at once; the service's reply settles the real number
+    ask('hit');
+  });
 })();
 
 main().catch(err => { console.error(err); showFallback('啟動時發生錯誤。', String(err && err.message || err)); });
