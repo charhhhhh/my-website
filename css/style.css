@@ -299,8 +299,13 @@ canvas[data-cursor="aim"] {
 .tally {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 6px;
   margin: 18px 0 0;
+}
+
+/* letter-spacing leaves a trailing gap after the last glyph; cancel it so both sides match */
+.tally .label {
+  margin-right: -.18em;
 }
 
 .tally #tallyOut {
@@ -313,7 +318,6 @@ canvas[data-cursor="aim"] {
   font: 12px/1 var(--sans);
   color: var(--muted);
   letter-spacing: .02em;
-  margin-left: -6px;
 }
 
 /* ── specimen panel ── */
